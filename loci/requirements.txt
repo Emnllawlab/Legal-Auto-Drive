@@ -1,0 +1,16 @@
+flask>=3.0
+pyyaml>=6.0
+pywebview>=5.0
+python-docx>=1.1
+openpyxl>=3.1
+
+# 捆绑的脱敏引擎 desensitize/ 所需（整案脱敏功能）
+pymupdf>=1.24
+rapidocr_onnxruntime>=1.3
+opencv-python>=4.8
+pillow>=10.0
+numpy
+cryptography>=42.0
+# 可选：换官方 PaddleOCR（DESENSITIZE_OCR=paddle）
+# paddleocr>=2.7
+# paddlepaddle>=2.6

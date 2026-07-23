@@ -1,0 +1,44 @@
+# 案件实体文件（绝不上传）
+cases/
+inbox/
+
+# 脱敏输出目录（含案件内容）
+cases_脱敏/
+*_脱敏/
+
+# 上传脱敏暂存（敏感原件，跑完即删，绝不上传）
+_脱敏上传/
+
+# ChromaDB 向量库（二进制，可本地重建）
+vectors/
+
+# 运行日志
+logs/
+*.log
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# sidecar 元数据（含文件路径等本地信息）
+.*.loci.json
+
+# 本地配置覆盖（若有）
+*.local.yaml
+.env
+
+# 案件登记（含真实当事人/案号，绝不上传）——本地保留、不入库
+auto_filer/config.yaml
+*.bak
+*.bak2

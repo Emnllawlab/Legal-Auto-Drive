@@ -1,0 +1,1246 @@
+mappings:
+- aliases:
+  - 授权委托书
+  - 授权书
+  - 代理授权书
+  - 诉讼授权委托书
+  - 授权委托
+  source_map:
+    _default: 00_签约与委托/授权委托书
+- aliases:
+  - 委托代理协议
+  - 法律服务协议
+  - 聘请律师协议
+  - 律师委托合同
+  source_map:
+    _default: 00_签约与委托/委托代理协议
+- aliases:
+  - 利益冲突检索
+  - 利冲检查
+  - 冲突检索
+  - 利益冲突报告
+  source_map:
+    _default: 00_签约与委托/利益冲突检索
+- aliases:
+  - 营业执照
+  - 身份证
+  - 主体信息
+  - 工商内档
+  - 企业信用报告
+  - 统一社会信用代码证
+  source_map:
+    _default: 00_签约与委托/主体信息
+- aliases:
+  - 案件大事记
+  - 大事记
+  - 时间轴
+  - 案件年表
+  - 事件年表
+  - 事件时间线
+  source_map:
+    _default: 00_签约与委托/案件大事记
+- aliases:
+  - 购销合同
+  - 采购合同
+  - 销售合同
+  - 供货合同
+  - 服务合同
+  - 服务协议
+  - 买卖合同
+  - 劳务合同
+  - 承揽合同
+  - 合作协议
+  - 框架协议
+  - 补充协议
+  - 保密协议
+  - 劳动合同
+  - 股权转让协议
+  - 租赁合同
+  source_map:
+    _default: 01_案件资料/客户提供材料/合同文件
+- aliases:
+  - 律师函
+  - 催告函
+  - 告知函
+  - 声明函
+  - 催款函
+  - 索赔函
+  - 确认函
+  - 通知函
+  - 往来函件
+  - 商务函
+  source_map:
+    _default: 01_案件资料/客户提供材料/往来函件
+- aliases:
+  - 技术规范
+  - 产品规格书
+  - 产品说明书
+  - 操作手册
+  - 安装手册
+  - 使用说明书
+  - 技术标准
+  - 技术文件
+  source_map:
+    _default: 01_案件资料/客户提供材料/技术文件
+- aliases:
+  - 银行流水
+  - 银行对账单
+  - 财务报表
+  - 账户明细
+  source_map:
+    _default: 01_案件资料/客户提供材料/财务文件
+- aliases:
+  - 行政处罚决定书
+  - 行政批复
+  - 行政许可
+  - 行政文件
+  - 行政答复
+  - 政府批文
+  source_map:
+    _default: 01_案件资料/客户提供材料/行政文件
+- aliases:
+  - 现场勘验报告
+  - 勘验笔录
+  - 勘察记录
+  - 现场勘察报告
+  - 现场勘验通知
+  - 勘验通知书
+  - 现场检查记录
+  source_map:
+    _default: 01_案件资料/现场勘验
+- aliases:
+  - 法律意见书
+  - 法律备忘录
+  - 法律研究报告
+  - 尽职调查报告
+  - 法律适用分析
+  - 法律风险报告
+  source_map:
+    _default: 02_法律研究/研究备忘录
+- aliases:
+  - 类案检索报告
+  - 判例检索
+  - 案例分析
+  - 裁判规则汇编
+  - 裁判要旨摘要
+  source_map:
+    _default: 02_法律研究/类案检索
+- aliases:
+  - 翻译件
+  - 译文
+  - 认证翻译
+  - 翻译文件
+  source_map:
+    _default: 09_跨境协作/翻译文件
+- aliases:
+  - 律师费账单
+  - 收费账单
+  - 发票
+  - 账单记录
+  source_map:
+    _default: 11_账单与工时/账单记录
+- aliases:
+  - 工时记录
+  - 计时单
+  - 工时表
+  source_map:
+    _default: 11_账单与工时/工时记录
+- aliases:
+  - 差旅报销单
+  - 差旅费用
+  - 报销单
+  - 出行费用
+  source_map:
+    _default: 11_账单与工时/差旅费用
+- aliases:
+  - 工作日志
+  - 工作记录
+  - 办案日志
+  - 内部进展记录
+  source_map:
+    _default: 12_内部工作文件/工作日志
+- aliases:
+  - 案件策略分析
+  - 诉讼策略
+  - 攻防策略
+  - 策略备忘录
+  - 内部策略文件
+  source_map:
+    _default: 12_内部工作文件/案件策略
+- aliases:
+  - 结案报告
+  - 结案总结
+  - 案件归档说明
+  - 内部归档材料
+  source_map:
+    _default: 13_结案归档/内部归档
+- aliases:
+  - 起诉状
+  - 民事起诉状
+  - 原告起诉状
+  - 再审起诉状
+  source_map:
+    ours: 04_诉讼文书/起诉状
+    opposing: 03_证据/对方证据
+- aliases:
+  - 答辩状
+  - 民事答辩状
+  - 被告答辩状
+  source_map:
+    ours: 04_诉讼文书/答辩状
+    opposing: 03_证据/对方证据
+- aliases:
+  - 反诉状
+  - 民事反诉状
+  source_map:
+    ours: 04_诉讼文书/反诉状
+    opposing: 03_证据/对方证据
+- aliases:
+  - 上诉状
+  - 民事上诉状
+  - 二审上诉状
+  source_map:
+    ours: 04_诉讼文书/上诉状
+    opposing: 03_证据/对方证据
+- aliases:
+  - 再审申请书
+  - 申诉书
+  source_map:
+    ours: 04_诉讼文书/再审申请书
+    opposing: 03_证据/对方证据
+- aliases:
+  - 代理词
+  - 代理意见
+  - 辩论意见
+  - 最终陈述意见
+  source_map:
+    ours: 04_诉讼文书/代理词
+    opposing: 03_证据/对方证据
+- aliases:
+  - 财产保全申请书
+  - 保全申请书
+  - 证据保全申请书
+  - 先予执行申请书
+  source_map:
+    ours: 04_诉讼文书/保全申请
+    opposing: 03_证据/对方证据
+- aliases:
+  - 管辖权异议申请书
+  - 回避申请书
+  - 延期举证申请书
+  - 调查取证申请书
+  - 追加当事人申请书
+  - 程序申请书
+  source_map:
+    ours: 04_诉讼文书/程序申请
+    opposing: 03_证据/对方证据
+- aliases:
+  - 鉴定意见异议申请书
+  - 对鉴定意见的异议
+  - 鉴定意见书异议
+  - 鉴定报告异议
+  source_map:
+    ours: 04_诉讼文书/程序申请
+    opposing: 03_证据/对方证据
+- aliases:
+  - 开庭通知
+  - 传票
+  - 应诉通知书
+  - 受理通知书
+  - 举证通知书
+  - 法院通知
+  - 法院来函
+  - 法院决定书
+  - 缴费通知
+  source_map:
+    court: 04_诉讼文书/法院来文
+    _default: 04_诉讼文书/法院来文
+- aliases:
+  - 送达回证
+  - 邮寄送达回证
+  - EMS签收记录
+  - 快递单
+  - 邮单
+  - 挂号信回执
+  - 签收记录
+  - 送达证明
+  source_map:
+    _default: 04_诉讼文书/送达文件
+- aliases:
+  - 民事判决书
+  - 判决书
+  - 民事裁定书
+  - 裁定书
+  - 一审判决书
+  - 二审判决书
+  - 裁判文书
+  - 民事调解书
+  - 仲裁裁决书
+  - 仲裁裁定
+  source_map:
+    court: 08_判决与执行/判决书
+    _default: 08_判决与执行/判决书
+- aliases:
+  - 执行申请书
+  - 强制执行申请书
+  source_map:
+    ours: 08_判决与执行/执行申请书
+    opposing: 03_证据/对方证据
+- aliases:
+  - 执行异议申请书
+  - 案外人执行异议
+  - 执行异议之诉状
+  source_map:
+    ours: 08_判决与执行/执行异议
+    opposing: 03_证据/对方证据
+- aliases:
+  - 证据目录
+  - 证据清单
+  - 证据列表
+  - 举证清单
+  source_map:
+    ours: 03_证据/我方证据
+    opposing: 03_证据/对方证据
+    _default: 03_证据/_待确认来源
+- aliases:
+  - 质证意见
+  - 质证意见书
+  - 对证据的质证意见
+  - 举证质证意见
+  source_map:
+    ours: 03_证据/质证意见
+    _default: 03_证据/质证意见
+- aliases:
+  - 证据交换笔录
+  - 举证质证交换记录
+  - 证据交换记录
+  source_map:
+    _default: 03_证据/证据交换记录
+- aliases:
+  - 鉴定申请书
+  - 司法鉴定申请书
+  - 委托鉴定申请书
+  source_map:
+    ours: 06_专家工作/司法鉴定
+    _default: 06_专家工作/司法鉴定
+- aliases:
+  - 鉴定意见书
+  - 司法鉴定意见书
+  - 司法鉴定报告
+  - 鉴定报告
+  - 补充鉴定意见
+  - 重新鉴定意见
+  - 鉴定结论
+  source_map:
+    _default: 06_专家工作/司法鉴定
+- aliases:
+  - 技术分析报告
+  - 失效分析报告
+  - 专家咨询意见
+  - 技术咨询报告
+  source_map:
+    _default: 06_专家工作/技术分析
+- aliases:
+  - 庭审提纲
+  - 发问提纲
+  - 举证质证提纲
+  - 开庭提纲
+  source_map:
+    ours: 05_庭审/庭前准备/庭审提纲
+    _default: 05_庭审/庭前准备/庭审提纲
+- aliases:
+  - 演示PPT
+  - 庭审PPT
+  - 可视化材料
+  - 示意图
+  - 时间轴图
+  source_map:
+    _default: 05_庭审/庭前准备/可视化材料
+- aliases:
+  - 庭审笔录
+  - 律师自记笔录
+  - 庭审摘要
+  source_map:
+    _default: 05_庭审/庭审记录/律师自记笔录
+- aliases:
+  - 和解协议
+  - 和解方案
+  - 和解条款
+  source_map:
+    _default: 07_和解与调解/和解方案
+- aliases:
+  - 调解申请书
+  source_map:
+    _default: 07_和解与调解/调解申请
+- aliases:
+  - 会议纪要
+  - 案件会议纪要
+  - 会议记录
+  source_map:
+    _default: 10_客户沟通/会议纪要
+- aliases:
+  - 阶段汇报
+  - 进展汇报
+  - 案件报告
+  - 办案小结
+  - 客户汇报
+  source_map:
+    _default: 10_客户沟通/阶段汇报
+- aliases:
+  - Complaint
+  - Supplemental Complaint
+  source_map:
+    ours: 04_Our Filings/Pleadings/Complaint
+    opposing: 03_Opposing Party Filings/Pleadings/Complaint
+    _default: 04_Our Filings/Pleadings/Complaint
+- aliases:
+  - Answer
+  - Answer and Affirmative Defenses
+  source_map:
+    ours: 04_Our Filings/Pleadings/Answer
+    opposing: 03_Opposing Party Filings/Pleadings/Answer
+- aliases:
+  - Counterclaim
+  - Crossclaim
+  - Third-Party Complaint
+  source_map:
+    ours: 04_Our Filings/Pleadings/Counterclaim
+    opposing: 03_Opposing Party Filings/Pleadings/Counterclaim
+- aliases:
+  - Motion Papers
+  - Notice of Motion
+  - Motion
+  - Declaration in Support
+  - Motion to Dismiss
+  - Motion for Summary Judgment
+  - Motion to Compel
+  - TRO Motion
+  - Preliminary Injunction Motion
+  - Daubert Motion
+  source_map:
+    ours: 04_Our Filings/Motions & Briefs/Motion Papers
+    opposing: 03_Opposing Party Filings/Motions & Briefs/Motion Papers
+- aliases:
+  - Memorandum in Support
+  - Memorandum of Law
+  - Brief in Support
+  - Supporting Brief
+  - Opening Brief
+  source_map:
+    ours: 04_Our Filings/Motions & Briefs/Memorandum in Support
+    opposing: 03_Opposing Party Filings/Motions & Briefs/Memorandum in Support
+- aliases:
+  - Opposition Brief
+  - Response Brief
+  - Memorandum in Opposition
+  source_map:
+    ours: 04_Our Filings/Motions & Briefs/Opposition Brief
+    opposing: 03_Opposing Party Filings/Motions & Briefs/Opposition Brief
+- aliases:
+  - Reply Brief
+  - Reply Memorandum
+  source_map:
+    ours: 04_Our Filings/Motions & Briefs/Reply Brief
+    opposing: 03_Opposing Party Filings/Motions & Briefs/Reply Brief
+- aliases:
+  - Initial Disclosures
+  - Rule 26 Disclosures
+  source_map:
+    ours: 04_Our Filings/Discovery — Sent/Initial Disclosures
+    opposing: 03_Opposing Party Filings/Discovery Responses/Initial Disclosures
+- aliases:
+  - Interrogatories
+  - Interrogatory Requests
+  - Rogs
+  source_map:
+    ours: 04_Our Filings/Discovery — Sent/Interrogatories
+    _default: 04_Our Filings/Discovery — Sent/Interrogatories
+- aliases:
+  - Interrogatory Responses
+  - Answers to Interrogatories
+  - Rog Responses
+  source_map:
+    ours: 04_Our Filings/Discovery — Responses/Interrogatory Responses
+    opposing: 03_Opposing Party Filings/Discovery Responses/Interrogatory Responses
+- aliases:
+  - Requests for Production
+  - RFP
+  - Document Requests
+  source_map:
+    ours: 04_Our Filings/Discovery — Sent/Requests for Production (RFPs)
+    _default: 04_Our Filings/Discovery — Sent/Requests for Production (RFPs)
+- aliases:
+  - RFP Responses
+  - Response to Requests for Production
+  - Document Production
+  source_map:
+    ours: 04_Our Filings/Discovery — Responses/RFP Responses
+    opposing: 03_Opposing Party Filings/Discovery Responses/RFP Responses
+- aliases:
+  - Requests for Admission
+  - RFA
+  source_map:
+    ours: 04_Our Filings/Discovery — Sent/Requests for Admission (RFAs)
+    _default: 04_Our Filings/Discovery — Sent/Requests for Admission (RFAs)
+- aliases:
+  - RFA Responses
+  - Responses to Requests for Admission
+  source_map:
+    ours: 04_Our Filings/Discovery — Responses/RFA Responses
+    opposing: 03_Opposing Party Filings/Discovery Responses/RFA Responses
+- aliases:
+  - Privilege Log
+  source_map:
+    ours: 04_Our Filings/Discovery — Responses/Privilege Log
+    opposing: 03_Opposing Party Filings/Discovery Responses/Privilege Log
+    _default: 05_Discovery & Doc Review/Document Review/Privilege Log (Master)
+- aliases:
+  - Notice of Deposition
+  - Deposition Subpoena
+  - 30(b)(6) Notice
+  source_map:
+    _default: 05_Discovery & Doc Review/Depositions/Notice of Deposition
+- aliases:
+  - Deposition Transcript
+  - Rough Transcript
+  - Errata Sheet
+  source_map:
+    _default: 05_Discovery & Doc Review/Depositions/Deposition Transcript
+- aliases:
+  - Deposition Outline
+  - Deposition Prep Notes
+  - Examination Questions
+  source_map:
+    _default: 05_Discovery & Doc Review/Depositions/Deposition Outline
+- aliases:
+  - Deposition Summary
+  - Deposition Digest
+  source_map:
+    _default: 05_Discovery & Doc Review/Depositions/Deposition Summary
+- aliases:
+  - Expert Report
+  - Opening Expert Report
+  - Initial Expert Report
+  source_map:
+    ours: 06_Experts/Our Experts/Expert Report
+    opposing: 06_Experts/Opposing Experts/Expert Report
+- aliases:
+  - Rebuttal Report
+  - Reply Expert Report
+  source_map:
+    ours: 06_Experts/Our Experts/Rebuttal Report
+    opposing: 06_Experts/Opposing Experts/Rebuttal Report
+- aliases:
+  - Expert CV
+  - Expert Qualifications
+  - Rule 26(a)(2) Disclosure
+  - Expert Disclosure
+  source_map:
+    ours: 06_Experts/Our Experts/Qualifications & CV
+    opposing: 06_Experts/Opposing Experts/Qualifications & CV
+- aliases:
+  - Pretrial Memorandum
+  - Trial Brief
+  - Pretrial Statement
+  source_map:
+    ours: 04_Our Filings/Pretrial Submissions/Pretrial Memorandum
+    opposing: 03_Opposing Party Filings/Pretrial Submissions/Pretrial Memorandum
+- aliases:
+  - Exhibit List
+  - Trial Exhibit List
+  source_map:
+    ours: 04_Our Filings/Pretrial Submissions/Exhibit List
+    opposing: 03_Opposing Party Filings/Pretrial Submissions/Exhibit List
+- aliases:
+  - Witness List
+  - Trial Witness List
+  source_map:
+    ours: 04_Our Filings/Pretrial Submissions/Witness List
+    opposing: 03_Opposing Party Filings/Pretrial Submissions/Witness List
+- aliases:
+  - Motion in Limine
+  source_map:
+    ours: 04_Our Filings/Pretrial Submissions/Motions in Limine
+    opposing: 03_Opposing Party Filings/Pretrial Submissions/Motions in Limine
+- aliases:
+  - Summons
+  - Proof of Service
+  - Certificate of Service
+  - Affidavit of Service
+  source_map:
+    court: 08_Court Documents/Summons & Service
+    _default: 08_Court Documents/Summons & Service
+- aliases:
+  - Hearing Notice
+  - Notice of Hearing
+  - Order to Show Cause Notice
+  source_map:
+    court: 08_Court Documents/Hearing Notices
+    _default: 08_Court Documents/Hearing Notices
+- aliases:
+  - Scheduling Order
+  - Case Management Order
+  - CMO
+  - Discovery Order
+  source_map:
+    court: 08_Court Documents/Case Management Order
+    _default: 08_Court Documents/Case Management Order
+- aliases:
+  - Court Order
+  - Order Granting Motion
+  - Order Denying Motion
+  - TRO Order
+  - Preliminary Injunction Order
+  - Standing Order
+  source_map:
+    court: 08_Court Documents/Court Orders
+    _default: 08_Court Documents/Court Orders
+- aliases:
+  - Judgment
+  - Final Judgment
+  - Default Judgment
+  - Jury Verdict
+  source_map:
+    court: 08_Court Documents/Judgment
+    _default: 08_Court Documents/Judgment
+- aliases:
+  - Settlement Agreement
+  - Settlement and Release
+  - Mutual Release
+  - Confidential Settlement Agreement
+  source_map:
+    _default: 09_Settlement/Settlement Agreement
+- aliases:
+  - Stipulation of Dismissal
+  - Notice of Dismissal
+  - Voluntary Dismissal
+  source_map:
+    _default: 09_Settlement/Dismissal Papers
+- aliases:
+  - Notice of Appeal
+  source_map:
+    ours: 10_Appeal/Notice of Appeal
+    _default: 10_Appeal/Notice of Appeal
+- aliases:
+  - Appellant's Brief
+  - Opening Appellate Brief
+  source_map:
+    ours: 10_Appeal/Appellate Briefs/Appellant's Brief
+    opposing: 10_Appeal/Appellate Briefs/Appellee's Brief
+- aliases:
+  - Appellee's Brief
+  - Respondent's Brief
+  - Answering Brief
+  source_map:
+    ours: 10_Appeal/Appellate Briefs/Appellee's Brief
+    opposing: 10_Appeal/Appellate Briefs/Appellant's Brief
+- aliases:
+  - Reply Brief on Appeal
+  - Appellant's Reply
+  source_map:
+    _default: 10_Appeal/Appellate Briefs/Reply Brief
+- aliases:
+  - Legal Hold Notice
+  - Litigation Hold
+  - Hold Notice
+  source_map:
+    _default: 05_Discovery & Doc Review/Legal Hold/Hold Notice
+- aliases:
+  - Trial Transcript
+  - Official Trial Transcript
+  source_map:
+    _default: 07_Trial/Trial Record/Trial Transcript
+- aliases:
+  - Opening Statement Draft
+  - Opening Statement
+  source_map:
+    _default: 07_Trial/Trial Preparation/Opening Statement
+- aliases:
+  - Closing Argument
+  - Closing Statement
+  - Summation
+  source_map:
+    _default: 07_Trial/Trial Preparation/Closing Argument
+- aliases:
+  - Trial Demonstratives
+  - Trial Slides
+  - Demonstrative Exhibits
+  source_map:
+    _default: 07_Trial/Trial Preparation/Trial Demonstratives
+- aliases:
+  - Oral Argument Outline
+  - Bench Memo
+  - Moot Court Prep
+  source_map:
+    _default: 10_Appeal/Oral Argument Materials
+- aliases:
+  - 报价方案
+  - 律师费报价
+  - 收费方案
+  - 费用方案
+  - 收费标准说明
+  source_map:
+    _default: 00_签约与委托/报价方案
+- aliases:
+  - 接案笔录
+  - 首次会面笔录
+  - 案情说明
+  - 初步咨询记录
+  - 立案资料
+  source_map:
+    _default: 00_签约与委托/接案笔录
+- aliases:
+  - 事实梳理
+  - 案件事实梳理
+  - 事实经过
+  - 案情概述
+  - 事实整理
+  - 事件经过
+  source_map:
+    _default: 01_案件资料/事实梳理
+- aliases:
+  - 录音资料
+  - 录像资料
+  - 录音证据
+  - 监控录像
+  - 通话录音
+  - 视频资料
+  - 会议录音
+  - 录音整理
+  - audio recording
+  - video recording
+  source_map:
+    _default: 01_案件资料/客户提供材料/录音录像
+- aliases:
+  - 证据材料
+  - 证据原件
+  - 证明材料
+  - 证据文件
+  - 书证
+  - 物证照片
+  - 证据原始材料
+  - 原始凭证
+  source_map:
+    ours: 03_证据/我方证据
+    opposing: 03_证据/对方证据
+    _default: 03_证据/_待确认来源
+- aliases:
+  - 电子数据
+  - 微信聊天记录
+  - 短信记录
+  - 电子邮件证据
+  - 网页截图
+  - 电子合同截图
+  - 聊天记录截图
+  - 电子证据
+  source_map:
+    _default: 03_证据/电子数据
+- aliases:
+  - 证人证言
+  - 证人陈述书
+  - 证人证词
+  - 证人证明
+  - 证人证词书
+  source_map:
+    _default: 03_证据/证人陈述
+- aliases:
+  - 法律法规
+  - 司法解释
+  - 部门规章
+  - 规范性文件
+  - 法律汇编
+  - 法律条文
+  - 行业标准文件
+  source_map:
+    _default: 02_法律研究/法律法规
+- aliases:
+  - 申请书
+  - 申请
+  source_map:
+    ours: 04_诉讼文书/申请书
+    opposing: 03_证据/对方证据
+- aliases:
+  - 专家辅助人意见
+  - 专家证人意见
+  - 专家辅助人陈述
+  - 专家出庭说明
+  source_map:
+    ours: 06_专家工作/专家辅助人
+    opposing: 03_证据/对方证据
+- aliases:
+  - 调解笔录
+  - 调解协议草案
+  - 调解过程记录
+  - 调解书草案
+  source_map:
+    _default: 07_和解与调解/调解笔录
+- aliases:
+  - 执行通知书
+  - 执行裁定书
+  - 执行过程文件
+  - 执行决定书
+  source_map:
+    court: 08_判决与执行/执行文件
+    _default: 08_判决与执行/执行文件
+- aliases:
+  - 二审材料
+  - 上诉阶段材料
+  - 二审文件汇总
+  source_map:
+    _default: 08_判决与执行/上诉文件
+- aliases:
+  - 外国法意见书
+  - 外国法查明报告
+  - 域外法律证明
+  - 外国法专家意见
+  source_map:
+    _default: 09_跨境协作/外国法证明
+- aliases:
+  - 外国律师意见
+  - 境外律所协作函
+  - 外国律师协作报告
+  - 国际律所协作意见
+  source_map:
+    _default: 09_跨境协作/外国律师协作
+- aliases:
+  - 涉外送达申请
+  - 海牙取证申请
+  - 司法协助请求
+  - 跨境送达材料
+  source_map:
+    _default: 09_跨境协作/送达与司法协助
+- aliases:
+  - 跨境法律意见书
+  - 涉外法律意见书
+  - 境外适用法律意见
+  source_map:
+    _default: 09_跨境协作/法律意见书跨境版
+- aliases:
+  - 境外诉讼材料
+  - 境外仲裁材料
+  - 海外诉讼文件
+  - CIETAC材料
+  source_map:
+    _default: 09_跨境协作/境外诉讼仲裁
+- aliases:
+  - 风险提示函
+  - 风险评估函
+  - 风险提示
+  - 法律风险提示
+  source_map:
+    _default: 10_客户沟通/风险提示
+- aliases:
+  - 邮件摘要
+  - 邮件整理
+  - 邮件摘录
+  - 往来邮件摘要
+  source_map:
+    _default: 10_客户沟通/邮件摘要
+- aliases:
+  - 拟发邮件
+  - 邮件草稿
+  - 外发邮件草稿
+  - 客户邮件草稿
+  source_map:
+    _default: 10_客户沟通/往来邮件/我方拟发
+- aliases:
+  - 邮件存档
+  - 收发邮件
+  - 往来邮件记录
+  - 邮件档案
+  source_map:
+    _default: 10_客户沟通/往来邮件/收发存档
+- aliases:
+  - 文书模板
+  - 格式范本
+  - 文件模板
+  - 文书格式
+  source_map:
+    _default: 12_内部工作文件/模板与格式
+- aliases:
+  - 费用预算
+  - 诉讼费用预算
+  - 成本测算
+  - 费用估算
+  source_map:
+    _default: 12_内部工作文件/费用预算
+- aliases:
+  - 客户交付材料
+  - 结案交付文件包
+  - 成果文件交付
+  - 结案文件
+  source_map:
+    _default: 13_结案归档/客户交付
+- aliases:
+  - Engagement Letter
+  - Retainer Agreement
+  - Fee Agreement
+  - Engagement Agreement
+  - Amendment to Engagement
+  source_map:
+    _default: 00_Engagement/Engagement Agreement
+- aliases:
+  - Party Information
+  - Client Profile
+  - Corporate Profile
+  - Org Chart
+  - Party Background
+  source_map:
+    _default: 00_Engagement/Party Information
+- aliases:
+  - Fee Proposal
+  - Billing Rate Schedule
+  - Preliminary Case Assessment
+  - Pitch Memo
+  - Proposal
+  source_map:
+    _default: 00_Engagement/Proposal & Pitch
+- aliases:
+  - Authorization to Retain Counsel
+  - Power of Attorney
+  - Authorization Letter
+  source_map:
+    _default: 00_Engagement/Authorization
+- aliases:
+  - Intake Notes
+  - Initial Consultation Notes
+  - First Meeting Notes
+  - Client Intake Memo
+  source_map:
+    _default: 00_Engagement/Intake Notes
+- aliases:
+  - Fact Analysis
+  - Case Chronology Memo
+  - Timeline
+  - Chronology of Events
+  - Case Background Memo
+  - Issue List
+  source_map:
+    _default: 01_Case Materials/Fact Analysis
+- aliases:
+  - Contract
+  - Agreement
+  - Purchase Agreement
+  - Service Agreement
+  - NDA
+  - Non-Disclosure Agreement
+  - Supply Agreement
+  - Distribution Agreement
+  - Employment Agreement
+  - Shareholder Agreement
+  - Joint Venture Agreement
+  - Statement of Work
+  - SOW
+  - Term Sheet
+  source_map:
+    _default: 01_Case Materials/Client-Provided Materials/Contracts & Agreements
+- aliases:
+  - Business Correspondence
+  - Pre-Litigation Letter
+  - Email Chain
+  - Demand Letter
+  - Cease and Desist Letter
+  - Termination Notice
+  - Notice Letter
+  source_map:
+    _default: 01_Case Materials/Client-Provided Materials/Correspondence
+- aliases:
+  - Technical Specification
+  - Product Specification
+  - Test Report
+  - Inspection Report
+  - Acceptance Certificate
+  - Technical Document
+  - Engineering Drawing
+  - User Manual
+  source_map:
+    _default: 01_Case Materials/Client-Provided Materials/Technical Documents
+- aliases:
+  - SEC Filing
+  - 10-K
+  - 10-Q
+  - Articles of Incorporation
+  - UCC Filing
+  - Corporate Records
+  - Annual Report
+  source_map:
+    _default: 01_Case Materials/Attorney-Gathered Materials/Corporate Records
+- aliases:
+  - Witness Statement
+  - Declaration
+  - Affidavit
+  - Site Photos
+  - Financial Records
+  - Evidence Gathered
+  source_map:
+    _default: 01_Case Materials/Attorney-Gathered Materials/Evidence
+- aliases:
+  - Site Inspection Report
+  - Site Visit Notes
+  - Field Notes
+  - Inspection Findings
+  source_map:
+    _default: 01_Case Materials/Site Inspection
+- aliases:
+  - Docket Entries Timeline
+  - Litigation Milestones Log
+  - Case Chronology
+  - Procedural History
+  source_map:
+    _default: 02_Legal Research/Case Chronology
+- aliases:
+  - Statute
+  - Federal Statute
+  - State Statute
+  - CFR
+  - FRCP
+  - Case Law Opinion
+  - Local Rules
+  - Regulation
+  source_map:
+    _default: 02_Legal Research/Statutes & Case Law
+- aliases:
+  - Legal Memorandum
+  - Research Memo
+  - Risk Assessment Memo
+  - Damages Assessment
+  - Likelihood of Success Analysis
+  - Internal Legal Memo
+  source_map:
+    _default: 02_Legal Research/Research Memos
+- aliases:
+  - Case Law Search
+  - Westlaw Research
+  - Lexis Research
+  - Precedent Analysis
+  - Circuit Split Survey
+  - Case Law Report
+  source_map:
+    _default: 02_Legal Research/Case Law Search
+- aliases:
+  - Custodian Acknowledgment
+  - Hold Acknowledgment
+  - Litigation Hold Acknowledgment
+  source_map:
+    _default: 05_Discovery & Doc Review/Legal Hold/Custodian Acknowledgment
+- aliases:
+  - Collection Log
+  - ESI Collection Log
+  - Forensic Collection Report
+  - Data Source List
+  source_map:
+    _default: 05_Discovery & Doc Review/Document Collection/Collection Log
+- aliases:
+  - Custodian List
+  - Key Custodians
+  - Employee Custodian List
+  source_map:
+    _default: 05_Discovery & Doc Review/Document Collection/Custodian List
+- aliases:
+  - Review Protocol
+  - Coding Manual
+  - Responsiveness Criteria
+  - Document Review Guidelines
+  source_map:
+    _default: 05_Discovery & Doc Review/Document Review/Review Protocol
+- aliases:
+  - Hot Documents
+  - Key Documents
+  - Smoking Gun Documents
+  - Critical Evidence
+  - Hot Docs List
+  source_map:
+    _default: 05_Discovery & Doc Review/Document Review/Hot Documents
+- aliases:
+  - Foreign Counsel Correspondence
+  - Foreign Law Opinion Letter
+  - International Co-Counsel Letter
+  source_map:
+    _default: 11_Cross-Border/Foreign Counsel Correspondence
+- aliases:
+  - Foreign Law Opinion
+  - PRC Law Opinion
+  - Chinese Law Analysis
+  - Enforceability Opinion
+  source_map:
+    _default: 11_Cross-Border/Foreign Law Opinions
+- aliases:
+  - China-Related Materials
+  - PRC Materials
+  - CIETAC Materials
+  - Certified Translation CN-EN
+  - Chinese Law Documents
+  source_map:
+    _default: 11_Cross-Border/China-Related Materials
+- aliases:
+  - Meeting Minutes
+  - Call Notes
+  - Client Meeting Notes
+  - Conference Call Summary
+  source_map:
+    _default: 12_Client Communications/Meeting Minutes
+- aliases:
+  - Status Report
+  - Litigation Update
+  - Case Update
+  - Progress Report
+  source_map:
+    _default: 12_Client Communications/Status Reports
+- aliases:
+  - Strategy Memo to Client
+  - Client-Facing Strategy Memo
+  - Client Strategy Update
+  source_map:
+    _default: 12_Client Communications/Strategy Memos to Client
+- aliases:
+  - Draft Email to Client
+  - Outgoing Email Draft
+  - Client Email Draft
+  source_map:
+    _default: 12_Client Communications/Email Correspondence/Drafts — Outgoing
+- aliases:
+  - Email Archive
+  - Sent Email
+  - Received Email
+  - Email Record
+  - Email Correspondence Archive
+  source_map:
+    _default: 12_Client Communications/Email Correspondence/Sent & Received Archive
+- aliases:
+  - Email Summary
+  - Email Digest
+  - Correspondence Summary
+  source_map:
+    _default: 12_Client Communications/Email Summaries
+- aliases:
+  - Document Request List
+  - Materials Request
+  - Client Document Checklist
+  source_map:
+    _default: 12_Client Communications/Document Request Lists
+- aliases:
+  - Time Records
+  - Timesheet
+  - Time Entries
+  - Billable Hours
+  source_map:
+    _default: 13_Billing & Time/Time Records
+- aliases:
+  - Expense Report
+  - Travel Reimbursement
+  - Receipt
+  - Travel Expenses
+  source_map:
+    _default: 13_Billing & Time/Expense Reports
+- aliases:
+  - Invoice
+  - Bill
+  - Statement of Account
+  - Client Invoice
+  source_map:
+    _default: 13_Billing & Time/Invoices
+- aliases:
+  - Daily Work Log
+  - Task List
+  - Pending Items
+  - Internal Notes
+  - Work Log
+  - Internal Work Notes
+  source_map:
+    _default: 14_Internal Work Files/Work Log
+- aliases:
+  - Case Strategy Memo
+  - Internal Strategy
+  - Litigation Plan
+  - Work Product Memo
+  - Internal Case Strategy
+  source_map:
+    _default: 14_Internal Work Files/Case Strategy
+- aliases:
+  - Internal Email
+  - Team Email
+  - Staff Email
+  - Internal Correspondence
+  source_map:
+    _default: 14_Internal Work Files/Internal Emails
+- aliases:
+  - Document Template
+  - Form Agreement
+  - Boilerplate
+  - Template
+  source_map:
+    _default: 14_Internal Work Files/Templates & Forms
+- aliases:
+  - Closing Checklist
+  - File Index
+  - Closing Memo
+  - Case Summary
+  - Internal Closing
+  - Case Closing Summary
+  source_map:
+    _default: 15_Case Closing/Internal Closing
+- aliases:
+  - File Transfer to Client
+  - Closing Letter
+  - Return of Documents
+  - Client File Transfer
+  source_map:
+    _default: 15_Case Closing/Client File Transfer
+- aliases:
+  - Conflict Check
+  - Conflict Report
+  - Conflict Waiver Letter
+  source_map:
+    _default: 00_Engagement/Conflict Check
+- aliases:
+  - Amended Complaint
+  - Amended Pleading
+  - Supplemental Pleading
+  - Amended Answer
+  source_map:
+    ours: 04_Our Filings/Pleadings/Amended Pleading
+    opposing: 03_Opposing Party Filings/Pleadings/Amended Pleading
+- aliases:
+  - Expert Deposition Transcript
+  - Expert Witness Deposition
+  - Deposition of Expert
+  source_map:
+    ours: 06_Experts/Our Experts/Expert Deposition Transcript
+    opposing: 06_Experts/Opposing Experts/Expert Deposition Transcript
+- aliases:
+  - Trial Outline
+  - Trial Plan
+  - Trial Notebook
+  - Trial Preparation Memo
+  source_map:
+    _default: 07_Trial/Trial Preparation/Trial Outline
+- aliases:
+  - Jury Instructions
+  - Proposed Jury Charge
+  - Jury Verdict Form
+  - Proposed Jury Instructions
+  source_map:
+    _default: 07_Trial/Trial Preparation/Jury Instructions
+- aliases:
+  - Attorney Trial Notes
+  - Trial Notes
+  - Daily Trial Summary
+  - Trial Attendance Notes
+  source_map:
+    _default: 07_Trial/Trial Record/Attorney Trial Notes
+- aliases:
+  - Settlement Demand
+  - Settlement Offer
+  - Counter-Offer
+  - Mediation Statement
+  - Mediation Brief
+  - Settlement Negotiation
+  source_map:
+    _default: 09_Settlement/Settlement Negotiations
+- aliases:
+  - Record on Appeal
+  - Joint Appendix
+  - Record Excerpts
+  - Appendix to Brief
+  source_map:
+    _default: 10_Appeal/Record on Appeal

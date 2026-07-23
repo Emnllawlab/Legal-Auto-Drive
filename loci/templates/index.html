@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Legal Auto Drive</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ── Sidebar ─────────────────────────────────────────── -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <span class="logo">Legal Auto Drive</span>
+    </div>
+
+    <div class="nav-group">
+      <button class="nav-btn active" data-sec="dashboard">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1.5" y="1.5" width="5" height="5" rx="1"/><rect x="9.5" y="1.5" width="5" height="5" rx="1"/>
+          <rect x="1.5" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/>
+        </svg>
+        概览
+      </button>
+
+      <button class="nav-btn" data-sec="inbox">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M1.5 10.5h3l1.5 2h4l1.5-2h3"/><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/>
+        </svg>
+        收件箱
+        <span class="nav-badge" id="nav-badge" style="display:none"></span>
+      </button>
+
+      <button class="nav-btn" data-sec="cases">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1.5" y="3.5" width="13" height="10" rx="1.5"/>
+          <path d="M5.5 3.5V2.5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1M4 7.5h8M4 10.5h5"/>
+        </svg>
+        案件
+        <span class="nav-count" id="nav-case-count"></span>
+      </button>
+
+      <button class="nav-btn" data-sec="log">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 4h12M2 8h8M2 12h10"/>
+        </svg>
+        日志
+      </button>
+
+      <button class="nav-btn" data-sec="rules">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 4h12M2 8h7"/><circle cx="12.5" cy="10.5" r="2.5"/>
+        </svg>
+        规则
+      </button>
+
+      <button class="nav-btn" data-sec="review">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 1.5l6.5 11.5h-13z"/><path d="M8 6.5v3M8 11.2v.3"/>
+        </svg>
+        待办复核
+        <span class="nav-badge" id="nav-review-badge" style="display:none"></span>
+      </button>
+
+      <button class="nav-btn" data-sec="desk">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M4 5.5h5M4 8h7M4 10.5h4"/>
+        </svg>
+        脱敏工作台
+      </button>
+    </div>
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-group">
+      <button class="nav-btn nav-primary" data-sec="new-case">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 2v12M2 8h12"/>
+        </svg>
+        新建案件
+      </button>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="daemon-pill" id="sidebar-daemon">
+        <span class="dot dot-gray"></span>
+        <span id="sidebar-daemon-label">守护进程</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Main ────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- ─ Dashboard ─ -->
+    <section id="sec-dashboard" class="sec active">
+      <div class="topbar">
+        <div class="page-title">概览</div>
+        <div class="topbar-actions">
+          <button class="btn" id="btn-once">处理收件箱</button>
+          <button class="btn btn-ghost" id="btn-dry">试运行</button>
+        </div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-label">守护进程</div>
+          <div class="stat-value" id="stat-daemon"><span class="dot dot-gray"></span> 检查中</div>
+          <button class="btn btn-xs btn-ghost mt8" id="btn-daemon">启动</button>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">收件箱</div>
+          <div class="stat-value" id="stat-inbox">—</div>
+          <div class="stat-sub mono" id="stat-inbox-path"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">案件数</div>
+          <div class="stat-value" id="stat-cases">—</div>
+          <div class="stat-sub mono" id="stat-cases-path"></div>
+        </div>
+      </div>
+
+      <div class="section-title">近期活动</div>
+      <div class="log-wrap" id="dash-log">
+        <div class="empty">暂无活动记录</div>
+      </div>
+    </section>
+
+    <!-- ─ Inbox ─ -->
+    <section id="sec-inbox" class="sec">
+      <div class="topbar">
+        <div class="page-title">收件箱</div>
+        <div class="topbar-actions">
+          <button class="btn" id="btn-process-inbox">处理全部</button>
+          <button class="btn btn-ghost" id="btn-upload-inbox">上传文件</button>
+          <button class="btn btn-ghost" id="btn-refresh-inbox">刷新</button>
+        </div>
+      </div>
+      <div class="list-wrap" id="inbox-list"><div class="empty">收件箱为空 ✓</div></div>
+    </section>
+
+    <!-- ─ Cases ─ -->
+    <section id="sec-cases" class="sec">
+      <div class="topbar">
+        <div class="page-title">案件</div>
+        <button class="btn" onclick="nav('new-case')">+ 新建</button>
+      </div>
+      <div class="list-wrap" id="cases-list"><div class="empty">加载中…</div></div>
+    </section>
+
+    <!-- ─ Log ─ -->
+    <section id="sec-log" class="sec">
+      <div class="topbar">
+        <div class="page-title">日志</div>
+        <label class="check-label">
+          <input type="checkbox" id="log-follow" checked> 自动滚动
+        </label>
+      </div>
+      <div class="log-wrap log-full mono" id="log-panel"></div>
+    </section>
+
+    <!-- ─ Rules ─ -->
+    <section id="sec-rules" class="sec">
+      <div class="topbar">
+        <div class="page-title">归档规则</div>
+        <div class="topbar-actions">
+          <input type="text" id="rules-search" class="search-input" placeholder="搜索规则…">
+          <button class="btn btn-ghost btn-sm" id="btn-add-rule">+ 新建</button>
+          <button class="btn btn-blue btn-sm" id="btn-save-rules">保存修改</button>
+        </div>
+      </div>
+      <div class="rules-hint">规则按顺序匹配，首个命中规则生效。↑↓ 调整优先级，修改后点击「保存修改」写入配置。</div>
+      <div class="list-wrap" id="rules-list"><div class="empty">加载中…</div></div>
+    </section>
+
+    <!-- ─ Review ─ -->
+    <section id="sec-review" class="sec">
+      <div class="topbar">
+        <div class="page-title">待办复核</div>
+        <button class="btn btn-ghost" id="btn-reprocess-uncat" style="margin-right:6px">重新归类未识别案件</button>
+        <button class="btn btn-ghost" id="btn-refresh-review">刷新</button>
+      </div>
+      <div class="rules-hint">未识别案件的文件（在 _未分类）和命名依据较弱的文件会汇集在此，点「重新归类」一键移到正确位置并改名。</div>
+      <div class="list-wrap" id="review-list"><div class="empty">加载中…</div></div>
+    </section>
+
+    <!-- ─ 脱敏工作台 ─ -->
+    <section id="sec-desk" class="sec">
+      <div class="topbar">
+        <div class="page-title">脱敏工作台</div>
+        <div class="topbar-actions">
+          <select id="desk-case" class="select-input" style="min-width:150px"><option value="">选择案件…</option></select>
+          <select id="desk-file" class="select-input" style="min-width:200px"><option value="">选择文件…</option></select>
+          <button class="btn" id="desk-analyze">识别</button>
+        </div>
+      </div>
+
+      <div class="desk-toolbar">
+        <div class="desk-modes">
+          <span class="desk-tb-label">脱敏方式</span>
+          <label class="mode-radio"><input type="radio" name="desk-mode" value="alias" checked><span>化名 · 可逆</span></label>
+          <label class="mode-radio"><input type="radio" name="desk-mode" value="blackout"><span>黑框 ██</span></label>
+          <label class="mode-radio"><input type="radio" name="desk-mode" value="asterisk"><span>星号 ＊＊</span></label>
+        </div>
+        <div class="desk-tb-right">
+          <span class="desk-stat" id="desk-stat"></span>
+          <button class="btn btn-ghost btn-sm" id="desk-reset" title="清空本案化名，重新编号">重置化名</button>
+          <button class="btn btn-blue btn-sm" id="desk-apply">生成脱敏 →</button>
+          <button class="btn btn-ghost btn-sm" id="desk-export" disabled>导出 .md</button>
+        </div>
+      </div>
+
+      <div class="desk-cats" id="desk-cats"></div>
+
+      <div class="desk-panes">
+        <div class="desk-pane">
+          <div class="desk-pane-head">原文 <span class="desk-pane-hint">点高亮删误标 · 划选文字补标</span></div>
+          <div class="desk-src" id="desk-src"><div class="empty">选择案件与文件后点「识别」</div></div>
+        </div>
+        <div class="desk-pane">
+          <div class="desk-pane-head">脱敏预览 <span class="mode-tag" id="desk-mode-tag">化名</span></div>
+          <div class="desk-out mono" id="desk-out"><div class="empty">识别后点「生成脱敏」在此预览</div></div>
+        </div>
+      </div>
+
+      <div class="desk-pending" id="desk-pending" style="display:none"></div>
+
+      <!-- 划选补标：类别选择浮层 -->
+      <div class="desk-picker" id="desk-picker" style="display:none"></div>
+    </section>
+
+    <!-- ─ New Case ─ -->
+    <section id="sec-new-case" class="sec">
+      <div class="topbar">
+        <div class="page-title">新建案件</div>
+        <button class="btn btn-ghost btn-sm" onclick="resetIntake()">重置</button>
+      </div>
+      <div class="intake-scroll">
+        <div class="intake-body" id="intake-body"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ── Output modal ───────────────────────────────────────── -->
+<div class="overlay" id="overlay" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <span id="modal-title">输出</span>
+      <button class="close-btn" onclick="closeModal()">×</button>
+    </div>
+    <pre class="modal-body" id="modal-body"></pre>
+  </div>
+</div>
+
+<!-- ── File tree modal ────────────────────────────────────────── -->
+<div class="overlay" id="filetree-overlay">
+  <div class="modal filetree-modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <div style="min-width:0">
+        <div id="ft-case-name" style="font-size:13px;font-weight:600"></div>
+        <div id="ft-path" class="mono" style="font-size:10.5px;color:var(--faint);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;margin-left:12px">
+        <span id="ft-total" style="font-size:11px;color:var(--faint)"></span>
+        <button class="btn btn-ghost btn-sm" id="ft-open-btn">在 Finder 中打开</button>
+        <button class="close-btn" onclick="closeFileTree()">×</button>
+      </div>
+    </div>
+    <div class="filetree-body" id="filetree-body"></div>
+  </div>
+</div>
+
+<!-- ── Case editor modal ───────────────────────────────────── -->
+<div class="overlay" id="case-overlay">
+  <div class="modal rule-modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <span id="case-modal-title">编辑案件</span>
+      <button class="close-btn" onclick="closeCaseModal()">×</button>
+    </div>
+    <div class="rule-modal-body">
+      <input type="hidden" id="ce-key">
+      <div class="field mb14">
+        <label>案件名称</label>
+        <div class="field-readonly" id="ce-name"></div>
+      </div>
+      <div class="field-row mb14">
+        <div class="field">
+          <label>案号 <span class="hint-sm">如（2024）沪01民初1234号</span></label>
+          <input type="text" id="ce-number" placeholder="（2024）沪01民初1234号">
+        </div>
+        <div class="field">
+          <label>场景 <span class="hint-sm">决定按哪套规则归档</span></label>
+          <select id="ce-scenario" class="select-input">
+            <option value="">（未设定，不隔离）</option>
+            <option value="中国民事">中国民事诉讼</option>
+            <option value="仲裁">仲裁</option>
+            <option value="中国刑事">中国刑事</option>
+            <option value="美国民事">美国民事诉讼</option>
+            <option value="刑民交叉">刑民交叉</option>
+          </select>
+        </div>
+      </div>
+      <div class="field mb14">
+        <label>归档根路径 <span class="hint-sm">留空则使用全局 CASES_DIR</span></label>
+        <input type="text" id="ce-path" placeholder="/Users/Admin/OneDrive/Cases">
+      </div>
+      <div class="field-row mb14">
+        <div class="field">
+          <label>我方当事人 <span class="hint-sm">逗号分隔</span></label>
+          <input type="text" id="ce-party-us" placeholder="如：甲公司">
+        </div>
+        <div class="field">
+          <label>对方当事人 <span class="hint-sm">逗号分隔</span></label>
+          <input type="text" id="ce-party-op" placeholder="如：乙公司">
+        </div>
+      </div>
+      <div class="field-row mb14">
+        <div class="field">
+          <label>第三人 <span class="hint-sm">缩写，逗号分隔</span></label>
+          <input type="text" id="ce-party-third" placeholder="（如有）">
+        </div>
+        <div class="field">
+          <label>受理法院 / 仲裁机构 <span class="hint-sm">逗号分隔</span></label>
+          <input type="text" id="ce-party-court" placeholder="上海市浦东新区人民法院">
+        </div>
+      </div>
+      <div class="field">
+        <label>识别关键词</label>
+        <div class="kw-tags" id="ce-kw-tags"></div>
+        <div class="kw-input-row">
+          <input type="text" id="ce-kw-input" class="kw-input" placeholder="输入关键词，回车添加">
+          <button class="btn btn-ghost btn-xs" onclick="addCaseKw()">添加</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-blue" onclick="confirmCase()">保存</button>
+      <button class="btn btn-ghost" onclick="closeCaseModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Rule editor modal ──────────────────────────────────── -->
+<div class="overlay" id="rule-overlay">
+  <div class="modal rule-modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <span id="rule-modal-title">编辑规则</span>
+      <button class="close-btn" onclick="closeRuleModal()">×</button>
+    </div>
+    <div class="rule-modal-body">
+      <input type="hidden" id="re-idx">
+      <div class="field mb14">
+        <label>规则名称</label>
+        <input type="text" id="re-name" placeholder="起诉状">
+      </div>
+      <div class="field mb14">
+        <label>目标文件夹 <span class="hint-sm">相对于案件根目录</span></label>
+        <input type="text" id="re-folder" placeholder="04_诉讼文书/起诉状/过程稿">
+      </div>
+      <div class="field mb14">
+        <label>文件来源 <span class="hint-sm">可选，限定本规则仅适用于该来源的文件</span></label>
+        <select id="re-source" class="select-input">
+          <option value="">不限</option>
+          <option value="court">法院 / 仲裁机构</option>
+          <option value="ours">我方</option>
+          <option value="opposing">对方</option>
+        </select>
+      </div>
+      <div class="field mb14">
+        <label>匹配关键词 <span class="hint-sm">文件内容中出现任一即命中</span></label>
+        <div class="kw-tags" id="re-kw-tags"></div>
+        <div class="kw-input-row">
+          <input type="text" id="re-kw-input" class="kw-input" placeholder="输入关键词，回车添加">
+          <button class="btn btn-ghost btn-xs" onclick="addKw('kw')">添加</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>文件名关键词 <span class="hint-sm">可选，仅匹配文件名</span></label>
+        <div class="kw-tags" id="re-tkw-tags"></div>
+        <div class="kw-input-row">
+          <input type="text" id="re-tkw-input" class="kw-input" placeholder="输入关键词，回车添加">
+          <button class="btn btn-ghost btn-xs" onclick="addKw('tkw')">添加</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-blue" onclick="confirmRule()">确定</button>
+      <button class="btn btn-ghost" onclick="closeRuleModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Reclassify modal (重新归类) ─────────────────────────────── -->
+<div class="overlay" id="reclass-overlay">
+  <div class="modal rule-modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <span>重新归类</span>
+      <button class="close-btn" onclick="closeReclass()">×</button>
+    </div>
+    <div class="rule-modal-body">
+      <input type="hidden" id="rc-path">
+      <div class="field mb14">
+        <label>当前文件</label>
+        <div class="field-readonly" id="rc-current"></div>
+      </div>
+      <div class="field mb14">
+        <label>归入案件</label>
+        <select id="rc-case" class="select-input"><option value="">（选择案件）</option></select>
+      </div>
+      <div class="field mb14">
+        <label>目标文件夹</label>
+        <select id="rc-target" class="select-input"><option value="">（先选案件）</option></select>
+      </div>
+      <div class="field">
+        <label>文件名 <span class="hint-sm">可直接编辑</span></label>
+        <input type="text" id="rc-name" placeholder="文件名">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-blue" onclick="confirmReclass()">移动并改名</button>
+      <button class="btn btn-ghost" onclick="closeReclass()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Pre-fill modal (投放后人工预分类) ───────────────────────── -->
+<div class="overlay" id="prefill-overlay">
+  <div class="modal rule-modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <span>投放文件 · 快速预填（可选）</span>
+      <button class="close-btn" onclick="closePrefill()">×</button>
+    </div>
+    <div class="rule-modal-body">
+      <div class="prefill-files" id="prefill-files"></div>
+      <div id="pf-multi" class="pf-multi-bar" style="display:none">
+        <span class="hint-sm">多文件：点上方文件逐个设置；下面字段对应<b>当前选中</b>的文件</span>
+        <button class="btn btn-ghost btn-xs" onclick="copyPfToAll()">复制到全部</button>
+      </div>
+      <div class="hint-sm mb14">案件 / 日期为整批共享；其余字段逐个文件设置。留空的由系统本地识别。</div>
+      <div class="field mb14">
+        <label>所属案件</label>
+        <select id="pf-case" class="select-input"><option value="">（自动识别）</option></select>
+      </div>
+      <div class="field-row mb14">
+        <div class="field">
+          <label>国家 / 地区</label>
+          <select id="pf-country" class="select-input">
+            <option value="">不限</option>
+            <option value="cn">中国</option>
+            <option value="us">美国</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>诉讼程序</label>
+          <select id="pf-proc" class="select-input">
+            <option value="">不限</option>
+            <option value="civil">中国民事诉讼</option>
+            <option value="arb">仲裁</option>
+            <option value="criminal">中国刑事</option>
+            <option value="us">美国民事诉讼</option>
+          </select>
+        </div>
+      </div>
+      <div class="field mb14">
+        <label>文件类型 / 目标文件夹 <span class="hint-sm" id="pf-target-hint">选择案件后列出该案全部文件夹</span></label>
+        <select id="pf-target" class="select-input"><option value="">（自动识别 / 不指定）</option></select>
+      </div>
+      <div class="field mb14">
+        <label>自定义文书名称 <span class="hint-sm">可选；填了就用它，替代自动识别/文件夹名（仍自动加 日期·简称·主体·组次·版本）</span></label>
+        <input type="text" id="pf-docname" placeholder="如：微信聊天记录、付款凭证、情况说明…">
+      </div>
+      <div class="field-row mb14">
+        <div class="field">
+          <label>来源主体 / 出具方 <span class="hint-sm">当事人或法院，进文件名</span></label>
+          <select id="pf-party" class="select-input"><option value="">（不指定）</option></select>
+        </div>
+        <div class="field">
+          <label>组次 <span class="hint-sm">多次提交的证据等</span></label>
+          <select id="pf-batch" class="select-input">
+            <option value="">第一组（无后缀）</option>
+            <option value="2">第二组（二）</option>
+            <option value="3">第三组（三）</option>
+            <option value="4">第四组（四）</option>
+            <option value="5">第五组（五）</option>
+            <option value="6">第六组（六）</option>
+            <option value="7">第七组（七）</option>
+            <option value="8">第八组（八）</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row mb14">
+        <div class="field">
+          <label>文件来源</label>
+          <select id="pf-source" class="select-input">
+            <option value="">（自动识别）</option>
+            <option value="court">法院 / 仲裁机构</option>
+            <option value="ours">我方</option>
+            <option value="opposing">对方</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>文书版本 / 阶段</label>
+          <select id="pf-version" class="select-input">
+            <option value="">（不适用 / 自动）</option>
+            <option value="v0 1">过程稿 v0 1</option>
+            <option value="v1 0">提交版 v1 0</option>
+            <option value="v0 9">内部定稿 v0 9</option>
+            <option value="vfinal">签署版 vfinal</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row mb14">
+        <div class="field">
+          <label>收件日期 <span class="hint-sm">文件名日期前缀</span></label>
+          <input type="date" id="pf-date" class="select-input">
+        </div>
+        <div class="field">
+          <label>备注 <span class="hint-sm">可选</span></label>
+          <input type="text" id="pf-notes" placeholder="对这份文件的说明…">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>翻译件</label>
+          <label class="check-label" style="margin-top:6px">
+            <input type="checkbox" id="pf-translation"> 这是译文（同原文文件夹，名后加「译」）
+          </label>
+        </div>
+        <div class="field">
+          <label>同时关联到其他案件 <span class="hint-sm">在其建快捷方式</span></label>
+          <select id="pf-also" class="select-input" multiple size="3"></select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-blue" onclick="confirmPrefill()">确定并上传</button>
+      <button class="btn btn-ghost" onclick="skipPrefill()">跳过，直接上传</button>
+      <button class="btn btn-ghost" onclick="closePrefill()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Drag overlay ───────────────────────────────────────────── -->
+<div class="drag-overlay" id="drag-overlay">
+  <div class="drag-overlay-inner">
+    <div class="drag-ol-icon">📥</div>
+    <div class="drag-ol-title">拖放文件到此处</div>
+    <div class="drag-ol-hint">松开鼠标，文件将投入收件箱</div>
+  </div>
+</div>
+
+<input type="file" id="file-input" multiple style="display:none">
+
+<!-- ── Toast ─────────────────────────────────────────────── -->
+<div class="toast" id="toast"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
