@@ -9,8 +9,7 @@
 覆盖范围：正文段落、表格（含嵌套）、页眉页脚。
 需要 pip install python-docx（延迟导入）。
 """
-from .rules import extract
-from .merge import merge_spans
+from .pipeline import analyze_text, spans_from_dicts
 from .pseudonymize import plan, Registry
 
 
@@ -64,21 +63,22 @@ def _apply_to_runs(runs, text, reps):
         run.text = "".join(pieces)
 
 
-def _process_paragraph(para, reg, ner, fallback):
+def _process_paragraph(para, reg, ner, fallback, lang, cats=None, allow=None):
     runs = para.runs
     text = "".join(r.text for r in runs)
     if not text.strip():
         return 0
-    regex_hits = extract(text, fallback=fallback)
-    ner_hits = ner.extract(text) if ner else []
-    spans = merge_spans(regex_hits, ner_hits, text)
+    detected = analyze_text(text, reg, ner=ner, fallback=fallback,
+                            lang=lang, cats=cats, allow=allow, register=True)
+    spans = spans_from_dicts(text, detected)
     if not spans:
         return 0
     _apply_to_runs(runs, text, plan(text, spans, reg))
     return len(spans)
 
 
-def desensitize_docx(in_path, out_path, reg: Registry, ner=None):
+def desensitize_docx(in_path, out_path, reg: Registry, ner=None,
+                     lang="both", cats=None, allow=None):
     """脱敏一个 .docx，保留排版写到 out_path。复用 reg 保证跨文档化名一致。
 
     返回命中实体总数。ner 为 QwenNER 实例则按段调用；为 None 则纯正则+兜底。
@@ -88,6 +88,6 @@ def desensitize_docx(in_path, out_path, reg: Registry, ner=None):
     fallback = ner is None
     total = 0
     for para in _all_paragraphs(doc):
-        total += _process_paragraph(para, reg, ner, fallback)
+        total += _process_paragraph(para, reg, ner, fallback, lang, cats, allow)
     doc.save(out_path)
     return total

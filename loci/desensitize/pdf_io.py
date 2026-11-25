@@ -6,13 +6,13 @@ apply_redactions() 会**真正删除底层文字**（不留可复制的原文）
   - "alias"   ：白底覆盖 + 叠加化名（甲公司 / 〔PHONE1〕），适合喂给外部 AI。
   - "blackout"：黑框涂黑，适合对外披露版。
 
-定位方式：在页面文本上跑识别管线得到"原文串+化名"，再用 page.search_for()
-找几何位置——绕开"字符偏移→坐标"的映射难题，稳。
+定位方式：在页面文本/词块流上跑识别管线得到"原文串+化名"，优先按
+page.get_text("words") 将字符范围映射到一个或多个几何矩形；无词块时再用
+page.search_for() 兜底。
 扫描件（无文本层）此处跳过，留给后续 OCR 接入。
 需要 pip install pymupdf（延迟导入）。
 """
-from .rules import extract
-from .merge import merge_spans
+from .pipeline import analyze_text, spans_from_dicts
 from .pseudonymize import plan, Registry
 
 _CJK_FONT = "china-s"      # PyMuPDF 内置简体中文字体，用于叠加化名
@@ -59,33 +59,35 @@ def _apply_items(page, items, mode):
     page.apply_redactions()                 # 真正抹除底层文字/图像
     if mode == "alias":
         for rect, alias in items:
-            _draw_alias(page, rect, alias)
+            if alias:
+                _draw_alias(page, rect, alias)
     return len(items)
 
 
-def _reps_for(text, reg, ner, fallback):
-    # 两遍：第一遍把实体登记进 Registry；第二遍 surface_spans 用已知实体
-    # 把同页里 NER 漏掉的重复 mention（如被印章压住截断的公司名）补齐。
-    ner_hits = ner.extract(text) if ner else []
-
-    def build():
-        hits = extract(text, fallback=fallback) + reg.surface_spans(text)
-        return plan(text, merge_spans(hits, ner_hits, text), reg)
-
-    build()
-    return build()
+def _reps_for(text, reg, ner, fallback, lang="both", cats=None, allow=None):
+    """统一走文本管线，再转成 PDF 定位所需的 replacement records。"""
+    detected = analyze_text(text, reg, ner=ner, fallback=fallback, lang=lang,
+                            cats=cats, allow=allow, register=True)
+    return plan(text, spans_from_dicts(text, detected), reg)
 
 
-def _text_items(page, reg, ner, fallback):
-    """文本层页：search_for 定位原文串。"""
+def _text_items(page, reg, ner, fallback, lang="both", cats=None, allow=None):
+    """文本层页：优先用词块坐标，保证跨行实体也能涂改。"""
+    items = _word_items(page, reg, ner, fallback, lang=lang,
+                        cats=cats, allow=allow)
+    if items:
+        return items
+    # 极少数 PDF 只有可搜索文本但没有 words 词块时保留旧路径作为兜底。
     items = []
-    for rep in _reps_for(page.get_text("text"), reg, ner, fallback):
+    for rep in _reps_for(page.get_text("text"), reg, ner, fallback,
+                         lang=lang, cats=cats, allow=allow):
         for rect in page.search_for(rep["original"]):
             items.append((rect, rep["alias"]))
     return items
 
 
-def _scanned_items(page, reg, ner, fallback, engine, zoom):
+def _scanned_items(page, reg, ner, fallback, engine, zoom,
+                   lang="both", cats=None, allow=None):
     """扫描页（无文本层）：渲染 -> OCR -> 像素框换算回 PDF 坐标。"""
     import io
     import fitz
@@ -101,9 +103,54 @@ def _scanned_items(page, reg, ner, fallback, engine, zoom):
     ranges = [(ls, le, (x0 / zoom, y0 / zoom, x1 / zoom, y1 / zoom))
               for ls, le, (x0, y0, x1, y1) in ranges]
     items = []
-    for rep in _reps_for(full_text, reg, ner, fallback):
-        for box in span_to_boxes(rep["start"], rep["end"], ranges):
-            items.append((fitz.Rect(*box), rep["alias"]))
+    for rep in _reps_for(full_text, reg, ner, fallback,
+                         lang=lang, cats=cats, allow=allow):
+        for i, box in enumerate(span_to_boxes(rep["start"], rep["end"], ranges)):
+            items.append((fitz.Rect(*box), rep["alias"] if i == 0 else ""))
+    return items
+
+
+def _word_stream(page):
+    """将 PDF 词块拼成可识别文本，并保留词块字符范围和矩形。"""
+    words = page.get_text("words", sort=True)
+    if not words:
+        return "", []
+    chunks = []
+    ranges = []
+    prev_key = None
+    pos = 0
+    for word in words:
+        x0, y0, x1, y1, value, block_no, line_no, _word_no = word[:8]
+        key = (block_no, line_no)
+        if chunks:
+            sep = " " if key == prev_key else "\n"
+            chunks.append(sep)
+            pos += len(sep)
+        start = pos
+        chunks.append(value)
+        pos += len(value)
+        ranges.append((start, pos, (x0, y0, x1, y1)))
+        prev_key = key
+    return "".join(chunks), ranges
+
+
+def _word_items(page, reg, ner, fallback, lang="both", cats=None, allow=None):
+    """识别词块流，并把命中映射为一个或多个 PDF 矩形。"""
+    import fitz
+
+    text, ranges = _word_stream(page)
+    if not text.strip():
+        return []
+    reps = _reps_for(text, reg, ner, fallback, lang=lang,
+                     cats=cats, allow=allow)
+    items = []
+    for rep in reps:
+        start, end = rep["start"], rep["end"]
+        first = True
+        for word_start, word_end, box in ranges:
+            if max(start, word_start) < min(end, word_end):
+                items.append((fitz.Rect(*box), rep["alias"] if first else ""))
+                first = False
     return items
 
 
@@ -136,7 +183,8 @@ def _seal_items(page, zoom):
 
 
 def desensitize_pdf(in_path, out_path, reg: Registry, ner=None, mode="alias",
-                    ocr_engine=None, ocr_zoom=2.0, detect_seals=False):
+                    ocr_engine=None, ocr_zoom=2.0, detect_seals=False,
+                    lang="both", cats=None, allow=None):
     """脱敏 PDF，写到 out_path。复用 reg 保证跨文档/跨页化名一致。
 
     有文本层的页走 search_for；无文本层的扫描页，若传了 ocr_engine 则
@@ -152,9 +200,11 @@ def desensitize_pdf(in_path, out_path, reg: Registry, ner=None, mode="alias",
         # 避免文本层坐标与可见图像错位导致涂改/叠加跑偏。
         scanned = _is_scanned(page)
         if not scanned and page.get_text("text").strip():
-            items = _text_items(page, reg, ner, fallback)
+            items = _text_items(page, reg, ner, fallback,
+                                lang=lang, cats=cats, allow=allow)
         elif ocr_engine is not None:
-            items = _scanned_items(page, reg, ner, fallback, ocr_engine, ocr_zoom)
+            items = _scanned_items(page, reg, ner, fallback, ocr_engine, ocr_zoom,
+                                   lang=lang, cats=cats, allow=allow)
         else:
             items = []
         if detect_seals:

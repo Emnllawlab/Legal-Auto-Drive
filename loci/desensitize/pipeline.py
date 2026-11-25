@@ -14,17 +14,67 @@ from .pseudonymize import (
     vault_save, vault_load,
 )
 from .model import Span, canon
+from .normalization import normalize_text
 
 __all__ = [
     "Span", "Registry", "desensitize_text", "analyze_text", "apply_review",
     "restore", "build_restore_map", "vault_save", "vault_load",
-    "_ner_chunked", "desensitize_md_file",
+    "_ner_chunked", "desensitize_md_file", "resolve_categories",
 ]
+
+
+_ALL_CATEGORIES = frozenset({
+    "COMPANY", "PERSON", "ADDRESS", "PHONE", "EMAIL", "ID_CARD", "USCC",
+    "BANKCARD", "PLATE", "CASE_NO", "MONEY", "SECURITIES", "WECHAT", "SSN",
+    "EIN", "PASSPORT", "HK_MO_TW", "DRIVER_LICENSE", "SOCIAL_SEC", "QQ",
+    "BIRTHDAY", "IP", "MAC", "IMEI", "GPS", "OTHER",
+})
+# 案件文件对外发送时通常需要严格保护案号/金额；如果文书本身属于公开法律材料，
+# 可选 public_legal，保留主体/联系方式等敏感信息但不处理案号、文号和金额。
+REDACTION_POLICIES = {
+    "strict": _ALL_CATEGORIES,
+    "public_legal": _ALL_CATEGORIES - {"CASE_NO", "MONEY"},
+}
+
+
+def spans_from_dicts(text, items):
+    """把 analyze_text 的 JSON span 恢复为内部 Span，供原格式 I/O 使用。"""
+    return [Span(int(item["start"]), int(item["end"]), item.get("label", "OTHER"),
+                 item.get("text", text[int(item["start"]):int(item["end"])]),
+                 item.get("source", "regex"), float(item.get("score", 1.0)),
+                 tuple(tuple(x) for x in item.get("fragments", ())))
+            for item in items]
 
 
 def _alnorm(t):
     """白名单匹配用的归一：去空白、转小写（中文不受影响）。"""
     return (t or "").strip().replace(" ", "").replace("　", "").lower()
+
+
+def resolve_categories(cats=None):
+    """解析类别集合或策略名，统一 canonical label，避免各 I/O 路径口径不同。"""
+    if cats is None:
+        return None
+    if isinstance(cats, str):
+        try:
+            return set(REDACTION_POLICIES[cats])
+        except KeyError as exc:
+            raise ValueError(f"未知脱敏策略：{cats}") from exc
+    return {canon(c) for c in cats}
+
+
+def _eligible_span(s, cats=None, allow=None):
+    """统一过滤所有来源的命中，包括 Registry 回扫结果。
+
+    过去 cats/allow 只过滤了本轮 regex/NER，已注册实体在 surface_spans 回扫时
+    仍可能重新出现，导致用户明明关闭了某类或加入白名单，第二遍又被脱敏。
+    过滤必须发生在 merge 前，且对三类来源一致。
+    """
+    if cats is not None and canon(s.label) not in cats:
+        return False
+    if allow and _alnorm(s.text) in allow:
+        return False
+    return True
 
 
 def desensitize_text(text, reg: Registry, ner_hits=None, ner=None,
@@ -41,36 +91,45 @@ def desensitize_text(text, reg: Registry, ner_hits=None, ner=None,
     """
     if lang is None:
         lang = getattr(reg, "lang", "zh")
+    cats = resolve_categories(cats)
+    if allow:
+        allow = {_alnorm(x) for x in allow}
+    normalized = normalize_text(text)
+    work_text = normalized.text
     if ner_hits is None and ner is not None:
-        ner_hits = ner.extract(text)
+        ner_hits = _ner_chunked(ner, work_text)
     no_model = ner_hits is None and ner is None
     if fallback is None:
         fallback = no_model        # 没有模型时用兜底正则补人名/公司/地址召回
     if lang == "both":             # 中英混排：两套正则都跑，merge_spans 会去重叠
-        regex_hits = extract(text, fallback=fallback) + extract_en(text, fallback=fallback)
+        regex_hits = extract(work_text, fallback=fallback) + extract_en(work_text, fallback=fallback)
     else:
         extractor = extract_en if lang == "en" else extract
-        regex_hits = extractor(text, fallback=fallback)
+        regex_hits = extractor(work_text, fallback=fallback)
     # 脱敏范围过滤：cats 为"要脱敏的归一类别"集合，None=全部。在入册前剔除，
     # 这样被保留的类别（如合同金额 MONEY）既不替换、也不进注册表/回扫。
-    if cats is not None:
-        regex_hits = [s for s in regex_hits if canon(s.label) in cats]
-        ner_hits = [s for s in (ner_hits or []) if canon(s.label) in cats]
-    # 误报白名单：用户标过"永不脱敏"的词，在入册前剔除（不替换、不进注册表/回扫）
-    if allow:
-        regex_hits = [s for s in regex_hits if _alnorm(s.text) not in allow]
-        ner_hits = [s for s in (ner_hits or []) if _alnorm(s.text) not in allow]
+    regex_hits = [s for s in regex_hits if _eligible_span(s, cats, allow)]
+    ner_hits = [s for s in (ner_hits or []) if _eligible_span(s, cats, allow)]
+    known_hits = [s for s in reg.surface_spans(work_text)
+                  if _eligible_span(s, cats, allow)]
     # 第一遍：抽取 + 已知实体 rescan（跨文档一致），先把本文实体全部登记入册
-    spans = merge_spans(regex_hits + reg.surface_spans(text), ner_hits or [], text, ner_score_threshold)
+    spans = merge_spans(regex_hits + known_hits, ner_hits or [],
+                        work_text, ner_score_threshold)
+    spans = [normalized.map_span(s) for s in spans]
     plan(text, spans, reg)
     # 第二遍：实体已入册，再回扫全文——捕捉同一文档内只被命中一次的名字/简称的
     # 其余 mention（如「被告：李志强」只锚到一处，正文里的「李志强」也要一并替换）
-    spans = merge_spans(regex_hits + reg.surface_spans(text), ner_hits or [], text, ner_score_threshold)
+    known_hits = [s for s in reg.surface_spans(work_text)
+                  if _eligible_span(s, cats, allow)]
+    spans = merge_spans(regex_hits + known_hits, ner_hits or [],
+                        work_text, ner_score_threshold)
+    spans = [normalized.map_span(s) for s in spans]
     return pseudonymize(text, spans, reg)
 
 
 def analyze_text(text, reg: Registry, ner=None, lang=None,
-                 fallback=None, ner_score_threshold=0.5, allow=None):
+                 fallback=None, ner_score_threshold=0.5, allow=None,
+                 register=False, cats=None):
     """人工复核第一步：只识别、不提交注册表。
 
     返回检测到的 span 列表 [{start,end,text,label}]，供 UI 高亮、删误标、补录。
@@ -78,19 +137,39 @@ def analyze_text(text, reg: Registry, ner=None, lang=None,
     """
     if lang is None:
         lang = getattr(reg, "lang", "zh")
-    ner_hits = _ner_chunked(ner, text) if ner else []
+    cats = resolve_categories(cats)
+    if allow:
+        allow = {_alnorm(x) for x in allow}
     if fallback is None:
         fallback = ner is None
+    normalized = normalize_text(text)
+    work_text = normalized.text
+    # NER 必须和 regex 使用同一份标准化视图；否则全角/空格/跨页导致的长度变化
+    # 会把 NER 偏移错映射到邻近字符。
+    ner_hits = _ner_chunked(ner, work_text) if ner else []
     if lang == "both":
-        hits = extract(text, fallback=fallback) + extract_en(text, fallback=fallback)
+        hits = extract(work_text, fallback=fallback) + extract_en(work_text, fallback=fallback)
     else:
         extractor = extract_en if lang == "en" else extract
-        hits = extractor(text, fallback=fallback)
-    hits = hits + reg.surface_spans(text)
-    spans = merge_spans(hits, ner_hits, text, ner_score_threshold)
+        hits = extractor(work_text, fallback=fallback)
+    hits = [s for s in hits if _eligible_span(s, cats, allow)]
+    hits = hits + [s for s in reg.surface_spans(work_text)
+                   if _eligible_span(s, cats, allow)]
+    spans = merge_spans(hits, ner_hits, work_text, ner_score_threshold)
+    spans = [normalized.map_span(s) for s in spans]
+    if register:
+        # 评测/实际脱敏模式：先登记强命中，再回扫同文档重复表面值；
+        # 前台预览默认 register=False，保持“只识别、不修改 Registry”的语义。
+        plan(text, spans, reg)
+        spans = merge_spans(
+            hits + [s for s in reg.surface_spans(work_text)
+                    if _eligible_span(s, cats, allow)],
+            ner_hits or [], work_text, ner_score_threshold,
+        )
+        spans = [normalized.map_span(s) for s in spans]
     out = [{"start": s.start, "end": s.end, "text": s.text, "label": s.label,
             "source": s.source, "score": round(float(s.score), 3),
-            "low_conf": _is_low_conf(s)}
+            "low_conf": _is_low_conf(s), "fragments": list(s.fragments)}
            for s in spans]
     if allow:
         out = [s for s in out if _alnorm(s["text"]) not in allow]
@@ -141,8 +220,8 @@ def desensitize_md_file(src, dst, reg: Registry, ner=None, ocr_engine=None, lang
     md = to_markdown(str(src), ocr_engine=ocr_engine)
     if not md.strip():
         return 0
-    ner_hits = _ner_chunked(ner, md) if ner else None
-    masked, applied = desensitize_text(md, reg, ner_hits=ner_hits, ner=None, lang=lang, cats=cats, allow=allow)
+    # 让端到端管线在标准化视图上调用 NER，再由 normalization.py 映射回 Markdown 原文。
+    masked, applied = desensitize_text(md, reg, ner=ner, lang=lang, cats=cats, allow=allow)
     _dst = Path(dst)
     _dst.parent.mkdir(parents=True, exist_ok=True)
     _dst.write_text(masked, encoding="utf-8")

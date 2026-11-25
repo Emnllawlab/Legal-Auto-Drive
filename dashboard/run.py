@@ -1,38 +1,38 @@
 #!/usr/bin/env python3
-"""案件工作区控制台 — 启动入口"""
-import os, sys, time, threading, subprocess
+"""案件工作区控制台 — 启动入口。"""
+
+import os
+import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
 
+from werkzeug.serving import make_server
+
 sys.path.insert(0, str(Path(__file__).parent))
-from dashboard import app as flask_app
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from dashboard.dashboard import app as flask_app
 
+HOST = "127.0.0.1"
 PORT = 5080
+URL = f"http://{HOST}:{PORT}"
 
-def _free_port():
+
+def _close_server(server, server_thread):
+    """Stop the serving loop and release the bound port."""
     try:
-        result = subprocess.run(
-            ["lsof", "-ti", f":{PORT}"],
-            capture_output=True, text=True, timeout=5,
-        )
-        pids = result.stdout.strip().split()
-        for pid in pids:
-            if pid:
-                subprocess.run(["kill", "-9", pid], capture_output=True)
-        if pids:
-            time.sleep(0.6)
-    except Exception:
-        pass
+        server.shutdown()
+    finally:
+        server_thread.join(timeout=5)
+        server.server_close()
 
-def _start_flask():
-    # threaded=True：语义索引/脱敏等耗时请求在独立线程处理，避免阻塞其余 UI 请求
-    # （单线程默认下，一次慢的建索引会让切案件/开菜单等全部卡住"半天没反应"）
-    flask_app.run(host="127.0.0.1", port=PORT, debug=False, use_reloader=False, threaded=True)
 
 def _activate_app():
     """Called by webview after the window is ready — bring it to front."""
     time.sleep(0.3)
 
-    # Method 1: AppKit direct — no Automation permission needed
+    # Method 1: AppKit direct — no Automation permission needed.
     try:
         import AppKit
         AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
@@ -40,7 +40,7 @@ def _activate_app():
     except Exception:
         pass
 
-    # Method 2: osascript via PID
+    # Method 2: osascript via PID.
     pid = os.getpid()
     r = subprocess.run(
         ["osascript", "-e",
@@ -50,53 +50,99 @@ def _activate_app():
     if r.returncode == 0:
         return
 
-    # Method 3: activate Python by name
+    # Method 3: activate Python by name.
     subprocess.run(
         ["osascript", "-e", 'tell application "Python" to activate'],
         capture_output=True,
     )
 
+
 def _open_fallback():
-    """Browser fallback when pywebview is unavailable or fails."""
-    subprocess.run(["open", f"http://localhost:{PORT}"])
-    print(f"浏览器访问: http://localhost:{PORT}")
+    """Open the already-bound server in a browser and wait for Ctrl+C.
+
+    Returning ``False`` when the browser cannot be opened prevents the caller
+    from reporting a successful launch for a service the user cannot reach.
+    """
+    try:
+        import webbrowser
+        opened = webbrowser.open(URL)
+    except Exception as exc:
+        print(f"❌ 浏览器回退失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+        return False
+    if not opened:
+        print(f"❌ 浏览器未能打开 {URL}，服务未就绪。", file=sys.stderr)
+        return False
+
+    print(f"浏览器已打开: {URL}")
     print("按 Ctrl+C 停止服务")
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         print("已停止。")
+    return True
+
+
+def main():
+    # make_server binds synchronously.  Do not create a GUI window or open a
+    # browser until this call has succeeded; an occupied port is fail-closed.
+    try:
+        server = make_server(HOST, PORT, flask_app, threaded=True)
+    except OSError as exc:
+        print(f"❌ 控制台无法绑定 {URL}，服务未启动：{exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"❌ 控制台服务启动失败，服务未启动：{type(exc).__name__}: {exc}",
+              file=sys.stderr)
+        return 1
+
+    server_thread = threading.Thread(
+        target=server.serve_forever,
+        name="dashboard-http-server",
+        daemon=True,
+    )
+    try:
+        server_thread.start()
+    except Exception as exc:
+        server.server_close()
+        print(f"❌ 控制台服务线程启动失败，服务未启动：{type(exc).__name__}: {exc}",
+              file=sys.stderr)
+        return 1
+
+    try:
+        try:
+            import webview
+        except ImportError:
+            print("未安装 pywebview，在浏览器中打开…")
+            return 0 if _open_fallback() else 1
+
+        try:
+            storage = Path(__file__).parent / ".webview_storage"
+            storage.mkdir(exist_ok=True)
+            webview.create_window(
+                "Legal Auto Drive",
+                URL,
+                width=1280,
+                height=820,
+                min_size=(900, 600),
+            )
+            # webview.start() returns after the window is closed.
+            webview.start(
+                func=_activate_app,
+                private_mode=False,
+                storage_path=str(storage),
+            )
+            print("窗口已关闭。")
+            return 0
+        except Exception as exc:
+            print(f"pywebview 启动失败 ({exc})，改用浏览器…", file=sys.stderr)
+            return 0 if _open_fallback() else 1
+    except KeyboardInterrupt:
+        print("\n控制台已退出")
+        return 0
+    finally:
+        _close_server(server, server_thread)
+
 
 if __name__ == "__main__":
-    print(f"[1/3] 清理端口 {PORT}...")
-    _free_port()
-
-    print(f"[2/3] 启动后端服务...")
-    t = threading.Thread(target=_start_flask, daemon=True)
-    t.start()
-    time.sleep(1.2)
-
-    print(f"[3/3] 打开控制台窗口...")
-    try:
-        import webview
-
-        storage = Path(__file__).parent / ".webview_storage"
-        storage.mkdir(exist_ok=True)
-
-        window = webview.create_window(
-            "Legal Auto Drive",
-            f"http://localhost:{PORT}",
-            width=1280,
-            height=820,
-            min_size=(900, 600),
-        )
-        # func= runs in a background thread after the window is fully ready
-        webview.start(func=_activate_app, private_mode=False, storage_path=str(storage))
-        print("窗口已关闭。")
-
-    except ImportError:
-        print("未安装 pywebview，在浏览器中打开...")
-        _open_fallback()
-    except Exception as e:
-        print(f"pywebview 启动失败 ({e})，改用浏览器...")
-        _open_fallback()
+    raise SystemExit(main())

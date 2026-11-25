@@ -3,8 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Legal Auto Drive</title>
-<link rel="stylesheet" href="/static/style.css">
+<title>Loci · Legal Workbench</title>
+<!-- ../static works both through Flask (normalizes to /static) and when a user
+     accidentally opens this template directly from Finder; the latter still
+     shows a clear local-service warning instead of a blank/inert page. -->
+<link rel="icon" href="../static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../static/style.css?v=20260915-workbench">
 </head>
 <body>
 
@@ -13,8 +17,12 @@
   <!-- ── Sidebar ─────────────────────────────────────────── -->
   <nav class="sidebar">
     <div class="sidebar-header">
-      <span class="logo">Legal Auto Drive</span>
+      <div class="brand-lockup">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="logo">Loci</span>
+      </div>
     </div>
+
 
     <div class="nav-group">
       <button class="nav-btn active" data-sec="dashboard">
@@ -88,6 +96,7 @@
         <span class="dot dot-gray"></span>
         <span id="sidebar-daemon-label">守护进程</span>
       </div>
+      <div class="sidebar-footnote">材料只保存在本机</div>
     </div>
   </nav>
 
@@ -97,15 +106,17 @@
     <!-- ─ Dashboard ─ -->
     <section id="sec-dashboard" class="sec active">
       <div class="topbar">
-        <div class="page-title">概览</div>
+        <div class="topbar-heading">
+          <div class="page-title">概览</div>
+        </div>
         <div class="topbar-actions">
-          <button class="btn" id="btn-once">处理收件箱</button>
+          <button class="btn" id="btn-once">预览收件箱</button>
           <button class="btn btn-ghost" id="btn-dry">试运行</button>
         </div>
       </div>
 
       <div class="stat-row">
-        <div class="stat-card">
+        <div class="stat-card stat-primary">
           <div class="stat-label">守护进程</div>
           <div class="stat-value" id="stat-daemon"><span class="dot dot-gray"></span> 检查中</div>
           <button class="btn btn-xs btn-ghost mt8" id="btn-daemon">启动</button>
@@ -122,8 +133,13 @@
         </div>
       </div>
 
-      <div class="section-title">近期活动</div>
-      <div class="log-wrap" id="dash-log">
+      <div class="activity-heading">
+        <div>
+          <div class="section-title">近期活动</div>
+        </div>
+        <span class="activity-note">本地归档记录</span>
+      </div>
+      <div class="log-wrap dashboard-log" id="dash-log">
         <div class="empty">暂无活动记录</div>
       </div>
     </section>
@@ -133,19 +149,30 @@
       <div class="topbar">
         <div class="page-title">收件箱</div>
         <div class="topbar-actions">
-          <button class="btn" id="btn-process-inbox">处理全部</button>
+          <button class="btn" id="btn-process-inbox">预览本批次</button>
           <button class="btn btn-ghost" id="btn-upload-inbox">上传文件</button>
+          <button class="btn btn-ghost" id="btn-upload-folder">上传文件夹</button>
           <button class="btn btn-ghost" id="btn-refresh-inbox">刷新</button>
         </div>
       </div>
-      <div class="list-wrap" id="inbox-list"><div class="empty">收件箱为空 ✓</div></div>
+      <div class="staging-panel" id="staging-panel" style="display:none">
+        <div class="staging-panel-head">
+          <div>
+            <div class="section-title">待确认暂存 <span class="staging-count" id="staging-count"></span></div>
+            <div class="hint-sm">这些文件尚未归档，不会被后台守护进程处理。</div>
+          </div>
+          <button class="btn btn-ghost btn-xs" id="btn-refresh-staging">刷新</button>
+        </div>
+        <div id="staging-list"></div>
+      </div>
+      <div class="list-wrap" id="inbox-list"><div class="empty">收件箱为空</div></div>
     </section>
 
     <!-- ─ Cases ─ -->
     <section id="sec-cases" class="sec">
       <div class="topbar">
         <div class="page-title">案件</div>
-        <button class="btn" onclick="nav('new-case')">+ 新建</button>
+        <button class="btn" onclick="nav('new-case')">新建案件</button>
       </div>
       <div class="list-wrap" id="cases-list"><div class="empty">加载中…</div></div>
     </section>
@@ -166,12 +193,16 @@
       <div class="topbar">
         <div class="page-title">归档规则</div>
         <div class="topbar-actions">
-          <input type="text" id="rules-search" class="search-input" placeholder="搜索规则…">
+          <input type="text" id="rules-search" class="search-input" placeholder="搜索当前类型…">
+          <button class="btn btn-ghost btn-sm" id="btn-rule-sandbox">沙盒测试</button>
+          <button class="btn btn-ghost btn-sm" id="btn-rule-history">历史版本</button>
           <button class="btn btn-ghost btn-sm" id="btn-add-rule">+ 新建</button>
           <button class="btn btn-blue btn-sm" id="btn-save-rules">保存修改</button>
         </div>
       </div>
-      <div class="rules-hint">规则按顺序匹配，首个命中规则生效。↑↓ 调整优先级，修改后点击「保存修改」写入配置。</div>
+      <div class="rule-scenario-bar" id="rule-scenario-tabs" aria-label="按案件类型筛选规则"></div>
+      <div class="rules-hint" id="rules-scope-hint">当前仅显示所选案件类型的专属规则。通用规则在归档时自动参与匹配，并在独立分区维护。</div>
+      <div class="rule-validation" id="rules-validation"></div>
       <div class="list-wrap" id="rules-list"><div class="empty">加载中…</div></div>
     </section>
 
@@ -179,45 +210,100 @@
     <section id="sec-review" class="sec">
       <div class="topbar">
         <div class="page-title">待办复核</div>
-        <button class="btn btn-ghost" id="btn-reprocess-uncat" style="margin-right:6px">重新归类未识别案件</button>
-        <button class="btn btn-ghost" id="btn-refresh-review">刷新</button>
+        <div class="topbar-actions">
+          <button class="btn btn-ghost btn-sm" id="btn-reprocess-uncat">重新归类未识别案件</button>
+          <button class="btn btn-ghost btn-sm" id="btn-refresh-review">刷新</button>
+        </div>
       </div>
       <div class="rules-hint">未识别案件的文件（在 _未分类）和命名依据较弱的文件会汇集在此，点「重新归类」一键移到正确位置并改名。</div>
       <div class="list-wrap" id="review-list"><div class="empty">加载中…</div></div>
     </section>
 
     <!-- ─ 脱敏工作台 ─ -->
-    <section id="sec-desk" class="sec">
-      <div class="topbar">
+    <section id="sec-desk" class="sec desk-workspace">
+      <div class="desk-header">
         <div class="page-title">脱敏工作台</div>
-        <div class="topbar-actions">
-          <select id="desk-case" class="select-input" style="min-width:150px"><option value="">选择案件…</option></select>
-          <select id="desk-file" class="select-input" style="min-width:200px"><option value="">选择文件…</option></select>
-          <button class="btn" id="desk-analyze">识别</button>
+        <span id="desk-document-name">尚未选择文件</span>
+        <button class="btn btn-ghost" id="desk-settings-toggle" aria-expanded="true" aria-controls="desk-settings">文件与设置</button>
+      </div>
+      <aside id="desk-settings" class="desk-settings" aria-label="文件与脱敏设置">
+        <div class="desk-settings-head"><strong>文件与设置</strong><button class="btn btn-ghost btn-sm" id="desk-settings-close">收起</button></div>
+        <div class="desk-settings-body">
+      <div class="desk-setting-section">
+        <h3>源文件</h3>
+        <div class="desk-route-tabs" role="tablist" aria-label="脱敏工作场景">
+          <button class="desk-route-tab active" type="button" data-desk-route="case">
+            <span class="desk-route-name">案件内材料</span>
+          </button>
+          <button class="desk-route-tab" type="button" data-desk-route="standalone">
+            <span class="desk-route-name">独立文件</span>
+          </button>
+        </div>
+        <p id="desk-route-source-hint">从案件目录选择材料</p>
+        <div id="desk-case-source" class="desk-source-block desk-case-source">
+          <label class="desk-source-field">
+            <span>案件</span>
+            <select id="desk-case" class="select-input" aria-label="选择案件"><option value="">选择案件…</option></select>
+          </label>
+          <label class="desk-source-field desk-source-file">
+            <span>材料</span>
+            <select id="desk-file" class="select-input" aria-label="选择案件材料" disabled><option value="">先选择案件…</option></select>
+          </label>
+          <button class="btn btn-ghost btn-sm" id="desk-refresh-files" title="重新扫描当前案件的可脱敏材料">刷新材料</button>
+          <span class="desk-file-status" id="desk-file-status" role="status">先选择案件</span>
+        </div>
+        <div id="desk-standalone-source" class="desk-source-block desk-standalone-source" hidden>
+          <button class="btn btn-blue btn-sm" id="desk-pick-file">从访达选择文件</button>
+          <button class="btn btn-ghost btn-sm" id="desk-open-file" disabled>在访达中显示</button>
+          <span class="desk-source-selected" id="desk-source-selected">尚未明确选择源文件</span>
         </div>
       </div>
 
-      <div class="desk-toolbar">
+      <div class="desk-setting-section">
+        <h3>脱敏设置</h3>
+        <div class="desk-policy-wrap">
+          <label for="desk-policy">脱敏范围</label>
+          <select id="desk-policy" class="select-input" title="选择或自定义需要脱敏的类别">
+            <option value="strict">严格保密</option>
+            <option value="public_legal">公开法律材料</option>
+            <option value="custom">自定义范围</option>
+          </select>
+        </div>
         <div class="desk-modes">
           <span class="desk-tb-label">脱敏方式</span>
           <label class="mode-radio"><input type="radio" name="desk-mode" value="alias" checked><span>化名 · 可逆</span></label>
           <label class="mode-radio"><input type="radio" name="desk-mode" value="blackout"><span>黑框 ██</span></label>
           <label class="mode-radio"><input type="radio" name="desk-mode" value="asterisk"><span>星号 ＊＊</span></label>
         </div>
-        <div class="desk-tb-right">
-          <span class="desk-stat" id="desk-stat"></span>
-          <button class="btn btn-ghost btn-sm" id="desk-reset" title="清空本案化名，重新编号">重置化名</button>
-          <button class="btn btn-blue btn-sm" id="desk-apply">生成脱敏 →</button>
-          <button class="btn btn-ghost btn-sm" id="desk-export" disabled>导出 .md</button>
-        </div>
+        <button class="btn btn-ghost btn-sm" id="desk-reset" title="清空当前化名，重新编号">重置化名</button>
+        <div class="desk-scope-options" id="desk-scope-options" hidden></div>
       </div>
-
+      <div class="desk-setting-section">
+        <h3>补充关键词 <span id="desk-term-count">0</span></h3>
+        <p>划选补标后自动加入。匹配当前文件全文，兼容断行和英文大小写；不推测简称。</p>
+        <form id="desk-term-form" class="desk-term-form">
+          <input id="desk-term-text" type="text" placeholder="输入漏识别的人名、公司等" aria-label="补充关键词" required maxlength="200">
+          <select id="desk-term-label" class="select-input" aria-label="关键词类别"></select>
+          <button class="btn btn-ghost btn-sm" type="submit">添加</button>
+        </form>
+        <div id="desk-term-list"></div>
+      </div>
+        </div>
+      </aside>
+      <div class="desk-commandbar">
+        <button class="btn btn-ghost btn-sm" id="desk-analyze">识别文件</button>
+        <button class="btn btn-ghost btn-sm" id="desk-match-terms" disabled>按补标匹配全文</button>
+        <button class="btn btn-blue btn-sm" id="desk-apply" disabled>生成脱敏</button>
+        <button class="btn btn-ghost btn-sm" id="desk-export" disabled>保存到工作区</button>
+        <button class="btn btn-ghost btn-sm" id="desk-undo" disabled>撤销</button>
+        <span class="desk-stat" id="desk-stat" role="status"></span>
+      </div>
       <div class="desk-cats" id="desk-cats"></div>
 
       <div class="desk-panes">
         <div class="desk-pane">
-          <div class="desk-pane-head">原文 <span class="desk-pane-hint">点高亮删误标 · 划选文字补标</span></div>
-          <div class="desk-src" id="desk-src"><div class="empty">选择案件与文件后点「识别」</div></div>
+          <div class="desk-pane-head">原文 <span class="desk-pane-hint">划选补标 · 点击高亮排除此处</span></div>
+          <div class="desk-src" id="desk-src"><div class="empty">先选择工作场景和源文件，再点「识别」</div></div>
         </div>
         <div class="desk-pane">
           <div class="desk-pane-head">脱敏预览 <span class="mode-tag" id="desk-mode-tag">化名</span></div>
@@ -226,6 +312,11 @@
       </div>
 
       <div class="desk-pending" id="desk-pending" style="display:none"></div>
+      <div class="desk-statusbar">
+        <button class="btn btn-ghost btn-xs" id="desk-pick-output">选择工作区</button>
+        <span class="desk-output-selected" id="desk-output-selected">保存前必须由用户选择输出位置</span>
+        <span id="desk-review-status" role="status">识别后请逐项复核</span>
+      </div>
 
       <!-- 划选补标：类别选择浮层 -->
       <div class="desk-picker" id="desk-picker" style="display:none"></div>
@@ -276,9 +367,9 @@
 
 <!-- ── Case editor modal ───────────────────────────────────── -->
 <div class="overlay" id="case-overlay">
-  <div class="modal rule-modal" onclick="event.stopPropagation()">
+  <div class="modal rule-modal case-maintenance-modal" onclick="event.stopPropagation()">
     <div class="modal-head">
-      <span id="case-modal-title">编辑案件</span>
+      <span id="case-modal-title">维护案件信息</span>
       <button class="close-btn" onclick="closeCaseModal()">×</button>
     </div>
     <div class="rule-modal-body">
@@ -306,7 +397,63 @@
       </div>
       <div class="field mb14">
         <label>归档根路径 <span class="hint-sm">留空则使用全局 CASES_DIR</span></label>
-        <input type="text" id="ce-path" placeholder="/Users/Admin/OneDrive/Cases">
+      <input type="text" id="ce-path" placeholder="~/OneDrive/Cases">
+      </div>
+      <div class="field-row mb14">
+        <div class="field">
+          <label>当前程序阶段 <span class="hint-sm">影响后续自动归档阶段判断</span></label>
+          <select id="ce-stage" class="select-input">
+            <option value="">（未设定）</option>
+            <optgroup label="中国诉讼">
+              <option value="侦查">侦查</option>
+              <option value="审查起诉">审查起诉</option>
+              <option value="一审">一审</option>
+              <option value="二审">二审</option>
+              <option value="再审">再审</option>
+              <option value="执行">执行</option>
+            </optgroup>
+            <optgroup label="仲裁及美国程序">
+              <option value="仲裁">仲裁</option>
+              <option value="司法审查">司法审查</option>
+              <option value="Pleadings">Pleadings</option>
+              <option value="Discovery">Discovery</option>
+              <option value="Trial">Trial</option>
+              <option value="Appeal">Appeal</option>
+            </optgroup>
+          </select>
+          <button type="button" class="btn btn-ghost stage-create-btn" id="btn-create-stage"
+                  onclick="createSelectedStage()">创建所选阶段目录</button>
+          <div class="hint-sm stage-create-status" id="stage-create-status"></div>
+        </div>
+        <div class="field">
+          <label>案由 / 争议主题</label>
+          <input type="text" id="ce-cause" placeholder="如：买卖合同纠纷、产品责任、借款合同纠纷">
+        </div>
+      </div>
+      <div class="field-row mb14">
+        <div class="field">
+          <label>我方角色</label>
+          <select id="ce-role" class="select-input">
+            <option value="">（未设定）</option>
+            <option value="plaintiff">原告方</option>
+            <option value="defendant">被告方</option>
+            <option value="third-party">第三人方</option>
+            <option value="claimant">仲裁申请人</option>
+            <option value="respondent">仲裁被申请人</option>
+            <option value="suspect">犯罪嫌疑人 / 被告人方</option>
+            <option value="complainant">被害人 / 报案人方</option>
+            <option value="plaintiff+suspect">民事原告 + 刑事嫌疑人</option>
+            <option value="defendant+suspect">民事被告 + 刑事嫌疑人</option>
+            <option value="plaintiff+complainant">民事原告 + 刑事报案人</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>案件状态 <span class="hint-sm">关闭后停止自动归档</span></label>
+          <select id="ce-status" class="select-input">
+            <option value="active">在办案件</option>
+            <option value="closed">已关闭</option>
+          </select>
+        </div>
       </div>
       <div class="field-row mb14">
         <div class="field">
@@ -362,6 +509,17 @@
         <input type="text" id="re-folder" placeholder="04_诉讼文书/起诉状/过程稿">
       </div>
       <div class="field mb14">
+        <label>适用场景 <span class="hint-sm">用于中国 / 美国 / 仲裁等硬隔离</span></label>
+        <select id="re-scenario" class="select-input">
+          <option value="通用">通用</option>
+          <option value="中国民事">中国民事</option>
+          <option value="仲裁">仲裁</option>
+          <option value="中国刑事">中国刑事</option>
+          <option value="美国民事">美国民事</option>
+          <option value="刑民交叉">刑民交叉</option>
+        </select>
+      </div>
+      <div class="field mb14">
         <label>文件来源 <span class="hint-sm">可选，限定本规则仅适用于该来源的文件</span></label>
         <select id="re-source" class="select-input">
           <option value="">不限</option>
@@ -386,10 +544,84 @@
           <button class="btn btn-ghost btn-xs" onclick="addKw('tkw')">添加</button>
         </div>
       </div>
+      <div class="field mt14">
+        <label>正文特征关键词 <span class="hint-sm">低权重辅助信号，不建议单独决定文书性质</span></label>
+        <div class="kw-tags" id="re-ckw-tags"></div>
+        <div class="kw-input-row">
+          <input type="text" id="re-ckw-input" class="kw-input" placeholder="如：司法委托书、鉴定事项、jury instructions">
+          <button class="btn btn-ghost btn-xs" onclick="addKw('ckw')">添加</button>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-blue" onclick="confirmRule()">确定</button>
       <button class="btn btn-ghost" onclick="closeRuleModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Rule sandbox modal ─────────────────────────────────── -->
+<div class="overlay" id="rule-sandbox-overlay">
+  <div class="modal rule-modal sandbox-modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <span>规则沙盒 · 先判定再归档</span>
+      <button class="close-btn" onclick="closeRuleSandbox()">×</button>
+    </div>
+    <div class="rule-modal-body">
+      <div class="hint-sm mb14">用一份脱敏后的标题、文件名和正文片段测试当前规则。沙盒不会移动、重命名或写入任何材料。</div>
+      <div class="field-row mb14">
+        <div class="field">
+          <label>文件名</label>
+          <input type="text" id="rs-filename" placeholder="如：证据清单.pdf">
+        </div>
+        <div class="field">
+          <label>文书标题 <span class="hint-sm">可选</span></label>
+          <input type="text" id="rs-title" placeholder="如：证据目录及说明">
+        </div>
+      </div>
+      <div class="field-row mb14">
+        <div class="field">
+          <label>限定案件 <span class="hint-sm">可选</span></label>
+          <select id="rs-case" class="select-input"><option value="">不限定，测试案件识别</option></select>
+        </div>
+        <div class="field">
+          <label>人工来源 <span class="hint-sm">可选</span></label>
+          <select id="rs-source" class="select-input">
+            <option value="">自动推断</option>
+            <option value="court">法院 / 仲裁机构</option>
+            <option value="ours">我方</option>
+            <option value="opposing">对方</option>
+          </select>
+        </div>
+      </div>
+      <div class="field mb14">
+        <label>正文片段</label>
+        <textarea id="rs-text" class="sandbox-text" placeholder="粘贴一段脱敏后的文书内容，建议包含案号、落款、标题及容易造成交叉命中的词…"></textarea>
+      </div>
+      <div class="sandbox-result" id="rule-sandbox-result">
+        <div class="pf-decision-empty">填写内容后点击“运行分析”。</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-blue" id="btn-run-rule-sandbox">运行分析</button>
+      <button class="btn btn-ghost" onclick="closeRuleSandbox()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Rule history modal ─────────────────────────────────── -->
+<div class="overlay" id="rule-history-overlay">
+  <div class="modal rule-modal history-modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <span>规则历史版本</span>
+      <button class="close-btn" onclick="closeRuleHistory()">×</button>
+    </div>
+    <div class="rule-modal-body">
+      <div class="hint-sm mb14">每次保存都会留下完整快照。恢复版本会生成一条新的历史记录，不会删除现有版本。</div>
+      <div id="rule-history-list"><div class="empty">加载中…</div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeRuleHistory()">关闭</button>
     </div>
   </div>
 </div>
@@ -429,45 +661,112 @@
 
 <!-- ── Pre-fill modal (投放后人工预分类) ───────────────────────── -->
 <div class="overlay" id="prefill-overlay">
-  <div class="modal rule-modal" onclick="event.stopPropagation()">
+  <div class="modal rule-modal prefill-modal" onclick="event.stopPropagation()">
     <div class="modal-head">
-      <span>投放文件 · 快速预填（可选）</span>
+      <span>归档决策卡 · 先预览后提交</span>
       <button class="close-btn" onclick="closePrefill()">×</button>
     </div>
     <div class="rule-modal-body">
+      <section class="pf-context-panel">
+        <div class="pf-section-head">
+          <div>
+            <div class="pf-section-title">批次上下文</div>
+            <div class="hint-sm">整批继承；单份文件可在下方覆盖。未填写的字段交给本地规则判断。</div>
+          </div>
+          <span class="pf-context-badge">人工事实优先</span>
+        </div>
+        <div class="pf-route-grid">
+          <div class="pf-route-step">
+            <span class="pf-route-no">01</span>
+            <label for="pf-case">所属案件</label>
+            <select id="pf-case" class="select-input"><option value="">（自动识别）</option></select>
+          </div>
+          <div class="pf-route-step">
+            <span class="pf-route-no">02</span>
+            <label for="pf-batch-source">文件来源</label>
+            <select id="pf-batch-source" class="select-input">
+              <option value="">（逐份填写 / 自动识别）</option>
+              <option value="ours">我方</option>
+              <option value="opposing">对方</option>
+              <option value="court">法院</option>
+              <option value="tribunal">仲裁机构</option>
+              <option value="third_party">第三方</option>
+              <option value="expert">专家 / 鉴定机构</option>
+              <option value="police">公安机关</option>
+              <option value="prosecutor">检察机关</option>
+              <option value="regulator">监管机构</option>
+              <option value="internal">内部材料</option>
+            </select>
+          </div>
+          <div class="pf-route-step">
+            <span class="pf-route-no">03</span>
+            <label for="pf-stage">程序阶段</label>
+            <select id="pf-stage" class="select-input">
+              <option value="">（使用案件当前阶段）</option>
+              <option value="诉前">诉前</option>
+              <option value="侦查">侦查</option>
+              <option value="审查起诉">审查起诉</option>
+              <option value="一审">一审</option>
+              <option value="二审">二审</option>
+              <option value="再审">再审</option>
+              <option value="申诉">申诉</option>
+              <option value="执行">执行</option>
+              <option value="仲裁">仲裁</option>
+              <option value="司法审查">司法审查</option>
+              <option value="Pleadings">US · Pleadings</option>
+              <option value="Discovery">US · Discovery</option>
+              <option value="Trial">US · Trial</option>
+              <option value="Appeal">US · Appeal</option>
+            </select>
+          </div>
+          <div class="pf-route-step">
+            <span class="pf-route-no">04</span>
+            <label for="pf-date">收件日期</label>
+            <input type="date" id="pf-date" class="select-input">
+          </div>
+        </div>
+        <div class="field-row pf-context-secondary">
+          <div class="field">
+            <label>国家 / 地区</label>
+            <select id="pf-country" class="select-input">
+              <option value="">不限</option>
+              <option value="cn">中国</option>
+              <option value="us">美国</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>诉讼程序</label>
+            <select id="pf-proc" class="select-input">
+              <option value="">不限</option>
+              <option value="civil">中国民事诉讼</option>
+              <option value="arb">仲裁</option>
+              <option value="criminal">中国刑事</option>
+              <option value="us">美国民事诉讼</option>
+              <option value="mixed">刑民交叉</option>
+            </select>
+          </div>
+          <div class="field pf-context-target">
+            <label>整批文件类型 / 目标文件夹 <span class="hint-sm" id="pf-batch-target-hint">可选</span></label>
+            <select id="pf-batch-target" class="select-input"><option value="">（逐份填写 / 自动识别）</option></select>
+          </div>
+        </div>
+        <div class="pf-folder-context" id="pf-folder-context"></div>
+      </section>
+
+      <div class="pf-section-head pf-file-section-head">
+        <div>
+          <div class="pf-section-title">逐份微调</div>
+          <div class="hint-sm">选择一份文件设置例外；空白项继续继承批次上下文。</div>
+        </div>
+      </div>
       <div class="prefill-files" id="prefill-files"></div>
       <div id="pf-multi" class="pf-multi-bar" style="display:none">
-        <span class="hint-sm">多文件：点上方文件逐个设置；下面字段对应<b>当前选中</b>的文件</span>
-        <button class="btn btn-ghost btn-xs" onclick="copyPfToAll()">复制到全部</button>
-      </div>
-      <div class="hint-sm mb14">案件 / 日期为整批共享；其余字段逐个文件设置。留空的由系统本地识别。</div>
-      <div class="field mb14">
-        <label>所属案件</label>
-        <select id="pf-case" class="select-input"><option value="">（自动识别）</option></select>
-      </div>
-      <div class="field-row mb14">
-        <div class="field">
-          <label>国家 / 地区</label>
-          <select id="pf-country" class="select-input">
-            <option value="">不限</option>
-            <option value="cn">中国</option>
-            <option value="us">美国</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>诉讼程序</label>
-          <select id="pf-proc" class="select-input">
-            <option value="">不限</option>
-            <option value="civil">中国民事诉讼</option>
-            <option value="arb">仲裁</option>
-            <option value="criminal">中国刑事</option>
-            <option value="us">美国民事诉讼</option>
-          </select>
-        </div>
+        <span class="hint-sm">以下字段对应当前选中的文件</span>
+        <button class="btn btn-ghost btn-xs" onclick="copyPfToAll()">将本份设置复制到全部</button>
       </div>
       <div class="field mb14">
-        <label>文件类型 / 目标文件夹 <span class="hint-sm" id="pf-target-hint">选择案件后列出该案全部文件夹</span></label>
-        <select id="pf-target" class="select-input"><option value="">（自动识别 / 不指定）</option></select>
+        <label>本份文件类型 / 目标文件夹 <span class="hint-sm" id="pf-target-hint">留空则继承批次或自动识别</span></label>
+        <select id="pf-target" class="select-input"><option value="">（继承批次 / 自动识别）</option></select>
       </div>
       <div class="field mb14">
         <label>自定义文书名称 <span class="hint-sm">可选；填了就用它，替代自动识别/文件夹名（仍自动加 日期·简称·主体·组次·版本）</span></label>
@@ -494,12 +793,19 @@
       </div>
       <div class="field-row mb14">
         <div class="field">
-          <label>文件来源</label>
+          <label>本份来源覆盖</label>
           <select id="pf-source" class="select-input">
-            <option value="">（自动识别）</option>
-            <option value="court">法院 / 仲裁机构</option>
+            <option value="">（继承批次 / 自动识别）</option>
             <option value="ours">我方</option>
             <option value="opposing">对方</option>
+            <option value="court">法院</option>
+            <option value="tribunal">仲裁机构</option>
+            <option value="third_party">第三方</option>
+            <option value="expert">专家 / 鉴定机构</option>
+            <option value="police">公安机关</option>
+            <option value="prosecutor">检察机关</option>
+            <option value="regulator">监管机构</option>
+            <option value="internal">内部材料</option>
           </select>
         </div>
         <div class="field">
@@ -513,15 +819,9 @@
           </select>
         </div>
       </div>
-      <div class="field-row mb14">
-        <div class="field">
-          <label>收件日期 <span class="hint-sm">文件名日期前缀</span></label>
-          <input type="date" id="pf-date" class="select-input">
-        </div>
-        <div class="field">
-          <label>备注 <span class="hint-sm">可选</span></label>
-          <input type="text" id="pf-notes" placeholder="对这份文件的说明…">
-        </div>
+      <div class="field mb14">
+        <label>本份备注 <span class="hint-sm">可选</span></label>
+        <input type="text" id="pf-notes" placeholder="对这份文件的说明…">
       </div>
       <div class="field-row">
         <div class="field">
@@ -535,10 +835,14 @@
           <select id="pf-also" class="select-input" multiple size="3"></select>
         </div>
       </div>
+      <div class="pf-decision" id="pf-decision">
+        <div class="pf-decision-empty">文件仍处于暂存状态。点击“预览本批次”后，系统才会读取内容并生成案件、文书性质、来源、命名和路径建议。</div>
+      </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-blue" onclick="confirmPrefill()">确定并上传</button>
-      <button class="btn btn-ghost" onclick="skipPrefill()">跳过，直接上传</button>
+      <button class="btn btn-ghost" id="btn-analyze-prefill">预览本批次</button>
+      <button class="btn btn-blue" onclick="confirmPrefill()">确认并提交</button>
+      <button class="btn btn-ghost" onclick="skipPrefill()">稍后处理</button>
       <button class="btn btn-ghost" onclick="closePrefill()">取消</button>
     </div>
   </div>
@@ -547,17 +851,21 @@
 <!-- ── Drag overlay ───────────────────────────────────────────── -->
 <div class="drag-overlay" id="drag-overlay">
   <div class="drag-overlay-inner">
-    <div class="drag-ol-icon">📥</div>
-    <div class="drag-ol-title">拖放文件到此处</div>
-    <div class="drag-ol-hint">松开鼠标，文件将投入收件箱</div>
+    <div class="drag-ol-icon" aria-hidden="true">
+      <svg class="ui-icon ui-icon-xl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 18.5h14"/><path d="M4 21h16"/></svg>
+    </div>
+    <div class="drag-ol-title">拖放文件或文件夹到此处</div>
+    <div class="drag-ol-hint">原始文件夹层级会保留为归档判断线索</div>
   </div>
 </div>
 
 <input type="file" id="file-input" multiple style="display:none">
+<input type="file" id="folder-input" webkitdirectory directory multiple style="display:none">
 
 <!-- ── Toast ─────────────────────────────────────────────── -->
 <div class="toast" id="toast"></div>
 
-<script src="/static/app.js"></script>
+<script src="../static/desk_terms.js?v=20260915-workbench"></script>
+<script src="../static/app.js?v=20260915-workbench"></script>
 </body>
 </html>

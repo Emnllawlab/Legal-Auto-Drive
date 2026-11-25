@@ -1,137 +1,105 @@
 #!/bin/bash
 # ============================================================
 # 材料归档守护进程控制
-# 用法:
-#   bash filer.sh start      后台守护
-#   bash filer.sh stop       停止
-#   bash filer.sh once       单次处理
-#   bash filer.sh dry-run    试运行
-#   bash filer.sh status     状态
-#   bash filer.sh log        查看日志
-#   bash filer.sh inbox      打开收件箱(Finder)
 #
-# 自定义路径（可附在任何子命令后）:
-#   --workspace DIR    工作区根目录（自动推导 inbox/cases/logs）
-#   --inbox DIR        指定收件箱路径
-#   --cases-dir DIR    指定案件存放路径
-#   --log-dir DIR      指定日志路径
-#
-# 示例:
-#   bash filer.sh once --workspace ~/Documents/MyWorkspace
-#   bash filer.sh once --cases-dir /Volumes/NAS/cases
-#   bash filer.sh dry-run --inbox ~/Downloads/待归档
+# start/stop/status all go through auto_filer/daemon_control.py.  Keeping
+# lifecycle decisions in one Python module makes the GUI and this CLI share
+# the same lock, state validation, readiness wait, and stop/reap behavior.
 # ============================================================
-set -e
+set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+WS_DIR="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 AF_DIR="$WS_DIR/auto_filer"
+PYTHON="$WS_DIR/.venv/bin/python"
 
-if [ -f "$WS_DIR/.env" ]; then
-  source "$WS_DIR/.env"
-fi
-
-PID_FILE="$AF_DIR/.filer.pid"
-LOG_DIR="${LOG_DIR:-$WS_DIR/logs}"
-INBOX="${INBOX_DIR:-$WS_DIR/inbox}"
+_python_path() {
+  if [ -x "$PYTHON" ]; then
+    printf '%s\n' "$PYTHON"
+    return 0
+  fi
+  # 兼容尚未运行 setup.sh 的开发环境；正式启动仍优先使用 .venv，
+  # 由 loci/run.py 负责拒绝 Rosetta/x86_64 进程。
+  local system_python
+  system_python="$(command -v python3 || true)"
+  if [ -n "$system_python" ]; then
+    echo "提示：未找到项目虚拟环境，暂使用系统 Python：$system_python" >&2
+    echo "      建议先运行: bash \"$WS_DIR/setup.sh\"" >&2
+    printf '%s\n' "$system_python"
+    return 0
+  fi
+  echo "未找到 Python 解释器。请先运行: bash \"$WS_DIR/setup.sh\"" >&2
+  return 1
+}
 
 _python() {
-  if command -v python3.11 &>/dev/null; then
-    python3.11 "$@"
-  elif command -v python3 &>/dev/null; then
-    python3 "$@"
-  else
-    echo "❌ Python3 未安装"
-    exit 1
-  fi
+  local python_path
+  python_path="$(_python_path)" || return 1
+  "$python_path" "$@"
 }
 
-# 从参数中提取自定义路径标志（--workspace/--inbox/--cases-dir/--log-dir）
-# 其余参数忽略（safety: 只传白名单 flag）
-_extract_path_args() {
-  local result=()
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --workspace|--inbox|--cases-dir|--log-dir)
-        result+=("$1" "$2")
-        shift 2
-        ;;
-      *)
-        shift
-        ;;
-    esac
-  done
-  echo "${result[@]}"
+_control() {
+  _python "$AF_DIR/daemon_control.py" --control-dir "$AF_DIR" "$@"
 }
+
+_env_value() {
+  local key="$1"
+  local fallback="$2"
+  _control env-value --key "$key" --default "$fallback"
+}
+
+_inbox_dir() { _env_value INBOX_DIR "$WS_DIR/inbox"; }
+_cases_dir() { _env_value CASES_DIR "$WS_DIR/cases"; }
+_log_dir() { _env_value LOG_DIR "$WS_DIR/logs"; }
 
 start() {
-  # start 不支持 --workspace 等参数（守护进程通过 .env 配置路径）
-  if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-    echo "⚠ 已在运行 (PID: $(cat "$PID_FILE"))"
-    exit 0
-  fi
-  echo "👀 启动归档守护..."
-  cd "$AF_DIR"
-  nohup _python auto_filer.py --daemon -v > /dev/null 2>&1 &
-  echo $! > "$PID_FILE"
-  sleep 1
-  if kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-    echo "✅ 守护进程已启动 (PID: $(cat "$PID_FILE"))"
-    echo "   收件箱: $INBOX"
-    echo "   丢文件进去就会自动归档"
-    echo "   如需自定义路径，请修改 .env 后重启"
-  else
-    echo "❌ 启动失败"
-    rm -f "$PID_FILE"
-    exit 1
-  fi
+  _control start --python "$PYTHON" --cwd "$AF_DIR" --timeout 5
 }
 
 stop() {
-  if [ -f "$PID_FILE" ]; then
-    PID=$(cat "$PID_FILE")
-    if kill -0 "$PID" 2>/dev/null; then
-      kill "$PID"
-      echo "🛑 已停止 (PID: $PID)"
-    fi
-    rm -f "$PID_FILE"
-  else
-    echo "⚪ 未运行"
-  fi
+  # daemon_control validates state+fingerprint+instance lock and waits for
+  # actual process exit; it does not remove metadata on timeout.
+  _control stop --timeout 5
 }
 
 status() {
-  if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-    echo "✅ 守护进程运行中 (PID: $(cat "$PID_FILE"))"
-  else
-    echo "⚪ 守护进程未运行"
-  fi
-  pending=$(find "$INBOX" -type f ! -name 'README*' ! -name '.gitkeep' ! -name '.DS_Store' 2>/dev/null | wc -l | tr -d ' ')
+  _control status
+  local inbox
+  inbox="$(_inbox_dir)"
+  local cases
+  cases="$(_cases_dir)"
+  local pending
+  pending=$(find "$inbox" -type f ! -name 'README*' ! -name '.gitkeep' \
+    ! -name '.DS_Store' 2>/dev/null | wc -l | tr -d ' ')
   echo "📬 收件箱待处理: $pending 个文件"
-  echo "📁 案件目录: ${CASES_DIR:-$WS_DIR/cases}"
+  echo "📁 案件目录: $cases"
 }
 
 log() {
-  local lf="$LOG_DIR/filer_$(date +%Y%m).log"
-  if [ -f "$lf" ]; then
-    tail -40 "$lf"
+  local log_dir
+  log_dir="$(_log_dir)"
+  local log_file="$log_dir/filer_$(date +%Y%m).log"
+  if [ -f "$log_file" ]; then
+    tail -40 "$log_file"
   else
     echo "⚠ 暂无日志"
   fi
 }
 
 inbox_open() {
-  mkdir -p "$INBOX"
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    open "$INBOX"
+  local inbox
+  inbox="$(_inbox_dir)"
+  mkdir -p "$inbox"
+  if [[ "${OSTYPE:-}" == "darwin"* ]]; then
+    open "$inbox"
   else
-    echo "收件箱: $INBOX"
-    ls -la "$INBOX"
+    echo "收件箱: $inbox"
+    ls -la "$inbox"
   fi
 }
 
 CMD="${1:-status}"
-shift || true   # 移除第一个参数，剩余传给 python
+shift || true
 
 case "$CMD" in
   start)
@@ -165,7 +133,7 @@ case "$CMD" in
     cd "$WS_DIR/dashboard" && _python dashboard.py
     ;;
   loci)
-    echo "🗂 启动 Loci → http://localhost:5081"
+    echo "启动 Loci → http://localhost:5081"
     _python "$WS_DIR/loci/run.py"
     ;;
   *)

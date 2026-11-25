@@ -1,0 +1,32 @@
+schema_version: 1
+description: Loci canonical taxonomy seed; legacy config rules remain authoritative during migration.
+scenarios:
+  通用:
+    label: 通用
+  中国民事:
+    label: 中国民事诉讼
+  仲裁:
+    label: 仲裁
+  中国刑事:
+    label: 中国刑事程序
+  美国民事:
+    label: United States Civil Litigation
+  刑民交叉:
+    label: 刑民交叉
+document_types:
+  - id: court_filing
+    label: 法院/仲裁机构程序文书
+    scenarios: [中国民事, 仲裁, 中国刑事, 美国民事]
+    source_policy: institution_or_manual
+  - id: party_submission
+    label: 当事人提交材料
+    scenarios: [中国民事, 仲裁, 中国刑事, 美国民事]
+    source_policy: party_or_manual
+  - id: evidence
+    label: 证据材料
+    scenarios: [中国民事, 仲裁, 中国刑事, 美国民事]
+    source_policy: manual_required_when_ambiguous
+  - id: correspondence
+    label: 往来/函件
+    scenarios: [通用, 中国民事, 仲裁, 中国刑事, 美国民事, 刑民交叉]
+    source_policy: manual_or_metadata

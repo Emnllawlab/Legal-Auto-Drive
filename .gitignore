@@ -42,3 +42,11 @@ venv/
 auto_filer/config.yaml
 *.bak
 *.bak2
+
+# Private runtime state, dated backups and redaction mappings
+*.bak.*
+*.lock
+state/
+*.sqlite*
+*.vault
+node_modules/

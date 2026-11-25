@@ -11,9 +11,25 @@
   3. 生成预览，确认后一键写入 config.yaml + 建立目录 + 生成 case_meta.yaml
 """
 
-import os, re, sys, textwrap
+import argparse
+import os
+import re
+import shutil
+import stat
+import sys
+import tempfile
+import textwrap
+import unicodedata
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
+
+import yaml
+
+
+_WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
+if str(_WORKSPACE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_WORKSPACE_ROOT))
 
 # ── ANSI 颜色 ──────────────────────────────────────────────
 RESET  = "\033[0m"
@@ -679,57 +695,289 @@ def _create_us_civil(base, role):
         _m(base, d)
 
 
-def create_folders(base: Path, proc_type: str, role: str):
-    """先收集全部目录(core relpath)，统一加层级序号(L2='A - '/L3='1. ')再建，适用于所有案件。"""
+# ══════════════════════════════════════════════════════════════
+# 紧凑目录模板 v2
+#
+# 具体文书名称、来源、批次、版本由文件名和 case_meta.yaml 表达；
+# 目录只保留程序阶段和材料大类。旧函数保留在上方，便于回看历史模板，
+# 这里用同名函数覆盖，确保新建案件使用紧凑结构。
+# ══════════════════════════════════════════════════════════════
+def _create_compact_base(base, criminal=False):
+    dirs = [
+        "00_签约与委托/委托代理协议", "00_签约与委托/利益冲突检索",
+        "00_签约与委托/接案笔录", "00_签约与委托/报价方案",
+        "00_签约与委托/主体信息", "00_签约与委托/案件大事记",
+        "01_案件资料/客户提供材料", "01_案件资料/事实梳理",
+        "01_案件资料/现场勘验", "02_法律研究/法律法规",
+        "02_法律研究/类案检索", "02_法律研究/研究备忘录",
+        "09_跨境协作/翻译文件", "09_跨境协作/外国律师协作",
+        "09_跨境协作/境外诉讼仲裁", "10_客户沟通/会议纪要",
+        "10_客户沟通/阶段汇报", "10_客户沟通/邮件摘要",
+        "10_客户沟通/往来邮件/我方拟发", "10_客户沟通/往来邮件/收发存档",
+        "10_客户沟通/风险提示", "11_账单与工时/账单记录",
+        "11_账单与工时/工时记录", "11_账单与工时/差旅费用",
+        "12_内部工作文件/案件策略", "12_内部工作文件/工作日志",
+        "12_内部工作文件/模板与格式", "13_结案归档/内部归档",
+        "13_结案归档/客户交付", "_待分类", "_待确认来源",
+    ]
+    if criminal:
+        dirs += ["00_签约与委托/授权委托书", "01_案件资料/人物关系", "01_案件资料/时间线", "02_法律研究/量刑检索",
+                 "10_会见与沟通/会见笔录", "10_会见与沟通/会见预约与批准",
+                 "10_会见与沟通/家属沟通"]
+    for d in dirs:
+        _m(base, d)
+
+
+_CIVIL_STAGE_DIRS = {
+    "一审": ("03_一审", ["授权委托与所函", "法院文书", "证据/我方证据",
+                         "证据/对方证据", "证据/质证与交换", "庭审", "专家工作",
+                         "和解调解", "判决裁定", "诉讼文书"]),
+    "二审": ("04_二审", ["授权委托与所函", "法院文书", "证据/我方证据",
+                         "证据/对方证据", "证据/质证与交换", "庭审", "专家工作",
+                         "和解调解", "判决裁定", "诉讼文书"]),
+    "再审": ("05_再审", ["授权委托与所函", "法院文书", "证据/我方证据",
+                         "证据/对方证据", "证据/质证与交换", "庭审", "专家工作",
+                         "和解调解", "判决裁定", "诉讼文书"]),
+    "执行": ("06_执行", ["授权委托与所函", "法院文书", "执行文书", "证据", "执行裁定"]),
+}
+
+
+def _civil_stage_key(stage):
+    value = str(stage or "").strip()
+    if "执行" in value:
+        return "执行"
+    if "再审" in value or "申诉" in value:
+        return "再审"
+    if "二审" in value:
+        return "二审"
+    return "一审"
+
+
+def _create_civil_staged(base, role, stage=None):
+    _create_compact_base(base)
+    root, children = _CIVIL_STAGE_DIRS[_civil_stage_key(stage)]
+    for child in children:
+        _m(base, f"{root}/{child}")
+
+
+_ARBITRATION_STAGE_DIRS = {
+    "仲裁": ["03_仲裁/授权委托与所函", "03_仲裁/仲裁机构文书",
+             "03_仲裁/证据/我方证据", "03_仲裁/证据/对方证据",
+             "03_仲裁/证据/质证与交换", "03_仲裁/庭审", "03_仲裁/专家工作",
+             "03_仲裁/和解调解", "03_仲裁/裁决", "03_仲裁/仲裁文书"],
+    "司法审查": ["04_司法审查/法院文书", "04_司法审查/申请与答辩"],
+    "执行": ["05_执行/法院文书", "05_执行/执行文书"],
+}
+
+
+def _arbitration_stage_key(stage):
+    value = str(stage or "").strip()
+    if "执行" in value:
+        return "执行"
+    if "司法审查" in value or "撤裁" in value or "撤销裁决" in value:
+        return "司法审查"
+    return "仲裁"
+
+
+def _create_arbitration_staged(base, role, stage=None):
+    _create_compact_base(base)
+    for rel in _ARBITRATION_STAGE_DIRS[_arbitration_stage_key(stage)]:
+        _m(base, rel)
+
+
+_CRIMINAL_STAGE_DIRS = {
+    "侦查": ["03_侦查阶段/机关文书", "03_侦查阶段/强制措施",
+             "03_侦查阶段/律师材料", "03_侦查阶段/证据材料"],
+    "审查起诉": ["04_审查起诉阶段/检察机关文书", "04_审查起诉阶段/阅卷与证据",
+                 "04_审查起诉阶段/律师材料", "04_审查起诉阶段/认罪认罚"],
+    "一审": ["05_一审/法院文书", "05_一审/辩护与代理材料", "05_一审/庭审",
+             "05_一审/证据与鉴定", "05_一审/附带民事"],
+    "二审": ["06_二审/法院文书", "06_二审/上诉与抗诉",
+             "06_二审/辩护与代理材料", "06_二审/庭审与证据"],
+    "再审": ["07_再审与申诉/申诉与再审材料", "07_再审与申诉/法院文书"],
+    "执行": ["08_执行阶段/执行机关文书", "08_执行阶段/减刑假释与变更执行",
+             "08_执行阶段/财产刑执行"],
+}
+
+
+def _criminal_stage_key(stage):
+    value = str(stage or "").strip()
+    if "审查起诉" in value:
+        return "审查起诉"
+    if "执行" in value:
+        return "执行"
+    if "再审" in value or "申诉" in value:
+        return "再审"
+    if "二审" in value:
+        return "二审"
+    if "一审" in value:
+        return "一审"
+    return "侦查"
+
+
+def _create_criminal_staged(base, role, stage=None):
+    _create_compact_base(base, criminal=True)
+    for rel in _CRIMINAL_STAGE_DIRS[_criminal_stage_key(stage)]:
+        _m(base, rel)
+
+
+_US_BASE_DIRS = [
+        "00_Engagement/Authorization", "00_Engagement/Conflict Check",
+        "00_Engagement/Engagement Agreement", "00_Engagement/Intake Notes",
+        "00_Engagement/Party Information", "00_Engagement/Proposal & Pitch",
+        "01_Case Materials/Client-Provided Materials", "01_Case Materials/Attorney-Gathered Materials",
+        "01_Case Materials/Fact Analysis", "01_Case Materials/Site Inspection",
+        "02_Legal Research/Case Chronology", "02_Legal Research/Case Law Search",
+        "02_Legal Research/Research Memos", "02_Legal Research/Statutes & Case Law",
+        "11_Cross-Border/Foreign Counsel", "11_Cross-Border/China-Related Materials",
+        "11_Cross-Border/Foreign Law", "12_Client Communications/Email & Drafting",
+        "12_Client Communications/Meetings & Reports", "13_Billing & Time/Time Records",
+        "13_Billing & Time/Expenses & Invoices", "14_Internal Work Files/Case Strategy",
+        "14_Internal Work Files/Work Log & Templates", "15_Case Closing/Internal Closing",
+        "15_Case Closing/Client File Transfer", "_待分类", "_待确认来源",
+]
+
+_US_STAGE_DIRS = {
+    "pleadings": [
+        "03_Opposing Party Filings/Pleadings", "03_Opposing Party Filings/Motions & Briefs",
+        "03_Opposing Party Filings/Discovery", "03_Opposing Party Filings/Pretrial Submissions",
+        "04_Our Filings/Pleadings", "04_Our Filings/Motions & Briefs",
+        "04_Our Filings/Discovery", "04_Our Filings/Pretrial Submissions",
+        "08_Court Documents/Orders & Notices", "08_Court Documents/Service & Summons",
+        "08_Court Documents/Judgment", "09_Settlement/Negotiations",
+        "09_Settlement/Agreements & Dismissal",
+    ],
+    "discovery": [
+        "05_Discovery & Doc Review/Legal Hold", "05_Discovery & Doc Review/Document Collection",
+        "05_Discovery & Doc Review/Document Review", "05_Discovery & Doc Review/Depositions",
+        "06_Experts/Our Experts", "06_Experts/Opposing Experts",
+    ],
+    "trial": [
+        "07_Trial/Trial Preparation", "07_Trial/Trial Record",
+    ],
+    "appeal": [
+        "10_Appeal/Notice & Record",
+        "10_Appeal/Appellate Briefs", "10_Appeal/Oral Argument",
+    ],
+}
+
+
+def _us_stage_key(stage):
+    value = str(stage or "").strip().lower()
+    if "appeal" in value or "上诉" in value:
+        return "appeal"
+    if "trial" in value or "审判" in value:
+        return "trial"
+    if "discovery" in value or "证据开示" in value:
+        return "discovery"
+    return "pleadings"
+
+
+def _create_us_civil(base, role, stage=None):
+    for rel in _US_BASE_DIRS + _US_STAGE_DIRS[_us_stage_key(stage)]:
+        _m(base, rel)
+
+
+def create_folders(base: Path, proc_type: str, role: str, stage=None):
+    """按当前阶段建紧凑目录；返回本次实际新建的相对目录。"""
     global _COLLECT
+    base = Path(base)
+    before = set()
+    if base.exists():
+        before = {str(path.relative_to(base)) for path in base.rglob("*") if path.is_dir()}
     _COLLECT = []
     try:
         if proc_type == "us_civil":
-            _create_us_civil(base, role)
-            _m(base, "_待分类")
+            _create_us_civil(base, role, stage)
         elif proc_type == "civil":
-            _create_civil_staged(base, role)
+            _create_civil_staged(base, role, stage)
         elif proc_type == "arbitration":
-            _create_arbitration_staged(base, role)
+            _create_arbitration_staged(base, role, stage)
         elif proc_type == "criminal":
-            _create_criminal_staged(base, role)   # 分层：侦查/审查起诉/一审/二审/再审/执行
+            _create_criminal_staged(base, role, stage)
         else:
-            _create_base(base)
             if proc_type == "mixed":
                 civil_role, crim_role = (role + "+suspect").split("+")[:2]
-                _create_civil(base, civil_role)
-                _create_criminal(base, crim_role)
+                value = str(stage or "").strip()
+                if value.startswith("刑事") or any(token in value for token in ("侦查", "审查起诉")):
+                    _create_criminal_staged(base, crim_role, value.replace("刑事", "", 1))
+                elif value.startswith("民事"):
+                    _create_civil_staged(base, civil_role, value.replace("民事", "", 1))
+                else:
+                    _create_compact_base(base, criminal=True)
+                    root, children = _CIVIL_STAGE_DIRS["一审"]
+                    for child in children:
+                        _m(base, f"{root}/{child}")
+                    for rel in _CRIMINAL_STAGE_DIRS["侦查"]:
+                        _m(base, rel)
                 for d in ["XX_刑民交叉协调/程序衔接分析",
                           "XX_刑民交叉协调/先刑后民策略",
                           "XX_刑民交叉协调/证据共享目录"]:
                     _m(base, d)
-        collected = _COLLECT
+            else:
+                _create_base(base)
+        collected = list(dict.fromkeys(_COLLECT))
     finally:
         _COLLECT = None
-    # 统一编号后建目录
     for rel in _number_relpaths(collected):
         Path(base, rel).mkdir(parents=True, exist_ok=True)
-    # 占位文件
-    for d in base.rglob("*"):
-        if d.is_dir() and not any(d.iterdir()):
-            (d / ".gitkeep").touch()
+    after_paths = [path for path in base.rglob("*") if path.is_dir()]
+    created = sorted(
+        (str(path.relative_to(base)) for path in after_paths
+         if str(path.relative_to(base)) not in before),
+        key=lambda value: (value.count("/"), value),
+    )
+    for rel in created:
+        directory = base / rel
+        if not any(directory.iterdir()):
+            (directory / ".gitkeep").touch()
+    return created
 
 # ── config.yaml 追加 ────────────────────────────────────────
-def append_case_to_config(cfg_path: Path, key: str, name: str, keywords: list):
+def append_case_to_config(cfg_path: Path, key: str, name: str, keywords: list,
+                          case_data: Optional[dict] = None,
+                          cases_dir: Optional[Path] = None):
     """把新案件追加进 config.yaml 的 cases 列表（YAML 往返，稳健）。
     简称(key)重复时返回 False，不写入。"""
-    import yaml
-    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
-    cfg.setdefault("cases", [])
-    if any(c.get("key") == key for c in cfg["cases"]):
-        return False  # 简称已存在
-    cfg["cases"].append({"key": key, "name": name, "keywords": list(keywords)})
-    cfg_path.write_text(
-        yaml.dump(cfg, allow_unicode=True, default_flow_style=False,
-                  sort_keys=False, width=120),
-        encoding="utf-8",
-    )
-    return True
+    af_dir = Path(__file__).resolve().parent.parent / "auto_filer"
+    if str(af_dir) not in sys.path:
+        sys.path.insert(0, str(af_dir))
+    from config_io import update_yaml
+    from domain import canonicalize_case
+
+    inserted = False
+    def _append(cfg):
+        nonlocal inserted
+        cfg = cfg or {}
+        cases = cfg.setdefault("cases", [])
+        if any(c.get("key") == key for c in cases):
+            return cfg
+        entry = {"key": key, "name": name, "keywords": list(keywords)}
+        if case_data:
+            scenario = {
+                "civil": "中国民事", "arbitration": "仲裁", "criminal": "中国刑事",
+                "us_civil": "美国民事", "mixed": "刑民交叉",
+            }.get(case_data.get("proc_type"), "通用")
+            entry.update({
+                "scenario": scenario,
+                "layout": case_data.get("proc_type", ""),
+                "role": case_data.get("role", ""),
+                "cause": case_data.get("cause", ""),
+                "stage": case_data.get("stage", ""),
+                "case_number": case_data.get("case_number", ""),
+                "party_us": list(case_data.get("parties_us") or []),
+                "party_op": list(case_data.get("parties_op") or []),
+                "party_third": list(case_data.get("parties_other") or []),
+                "cases_dir": str(cases_dir) if cases_dir else "",
+                "file_abbr": key,
+            })
+            entry["loci_matter"] = canonicalize_case(entry)
+        cases.append(entry)
+        inserted = True
+        return cfg
+
+    update_yaml(cfg_path, _append, default={})
+    return inserted
 
 # ── case_meta.yaml ──────────────────────────────────────────
 def write_meta(base: Path, data: dict):
@@ -751,47 +999,363 @@ def write_meta(base: Path, data: dict):
         parts = data["role"].split("+")
         role_label = f'{role_zh.get(parts[0], parts[0])} + {role_zh.get(parts[1], parts[1])}'
 
-    meta = f"""\
-# 案件元数据 — {today} 由 intake.py 生成
-# =====================================================
-name: "{data['case_name']}"
-created: "{today}"
+    meta = {
+        "name": data["case_name"],
+        "created": today,
+        "procedure": {
+            "type": data["proc_type"],
+            "type_zh": type_zh.get(data["proc_type"], data["proc_type"]),
+        },
+        "role": {
+            "code": data["role"],
+            "description": role_label,
+        },
+        "parties": {
+            "our_client": list(data.get("parties_us") or ["（待填写）"]),
+            "opposing": list(data.get("parties_op") or ["（待填写）"]),
+            "others": list(data.get("parties_other") or []),
+        },
+        "case_info": {
+            "cause_of_action": data.get("cause", ""),
+            "current_stage": data.get("stage", ""),
+        },
+        "file_abbr": data.get("abbr", ""),
+        "keywords": list(data.get("keywords") or []),
+        "notes": data.get("notes", ""),
+        "key_dates": {
+            "retainer": "",
+            "filing": "",
+            "next_deadline": "",
+        },
+        "related_cases": [],
+    }
+    (Path(base) / "case_meta.yaml").write_text(
+        yaml.safe_dump(
+            meta,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=False,
+            width=120,
+        ),
+        encoding="utf-8",
+    )
 
-procedure:
-  type: "{data['proc_type']}"
-  type_zh: "{type_zh.get(data['proc_type'], data['proc_type'])}"
 
-role:
-  code: "{data['role']}"
-  description: "{role_label}"
+# ── new_case.sh 的安全 CLI 辅助 ─────────────────────────────
+_CLI_TYPES = ("civil", "arbitration", "criminal", "us_civil", "mixed")
+_CLI_ROLES = {
+    "civil": frozenset(("plaintiff", "defendant", "third-party")),
+    "us_civil": frozenset(("plaintiff", "defendant", "third-party")),
+    "arbitration": frozenset(("claimant", "respondent")),
+    "criminal": frozenset(("suspect", "complainant")),
+}
 
-parties:
-  our_client: {_yaml_str_list(data['parties_us'])}
-  opposing:   {_yaml_str_list(data['parties_op'])}
-  others:     {_yaml_str_list(data['parties_other'])}
 
-case_info:
-  cause_of_action: "{data['cause']}"
-  current_stage:   "{data['stage']}"
+class NewCaseError(ValueError):
+    """A new-case request violates the CLI filesystem or taxonomy policy."""
 
-file_abbr: "{data['abbr']}"
-keywords:  [{', '.join('"' + k + '"' for k in data['keywords'])}]
 
-notes: "{data['notes']}"
+def _validate_cli_case_name(value: str) -> str:
+    """Accept exactly one safe directory component; never sanitize it."""
+    if not isinstance(value, str) or not value or value.strip() == "":
+        raise NewCaseError("案件名称不能为空")
+    if value in (".", ".."):
+        raise NewCaseError("案件名称不能是 . 或 ..")
+    if "\x00" in value:
+        raise NewCaseError("案件名称不能包含 NUL")
+    if "/" in value or "\\" in value:
+        raise NewCaseError("案件名称只能是单一目录名，不能包含路径分隔符")
+    if any(unicodedata.category(char) == "Cc" for char in value):
+        raise NewCaseError("案件名称不能包含控制字符")
+    return value
 
-key_dates:
-  retainer:      ""
-  filing:        ""
-  next_deadline: ""
 
-related_cases: []
-"""
-    (base / "case_meta.yaml").write_text(meta, encoding="utf-8")
+def _validate_cli_type(proc_type: str) -> str:
+    if proc_type not in _CLI_TYPES:
+        raise NewCaseError(f"非法程序类型: {proc_type!r}")
+    return proc_type
 
-def _yaml_str_list(items):
-    if not items:
-        return '["（待填写）"]'
-    return "[" + ", ".join(f'"{i}"' for i in items) + "]"
+
+def _validate_cli_role(proc_type: str, role: str) -> str:
+    if proc_type == "mixed":
+        parts = role.split("+") if isinstance(role, str) else []
+        if (len(parts) != 2 or parts[0] not in _CLI_ROLES["civil"]
+                or parts[1] not in _CLI_ROLES["criminal"]):
+            raise NewCaseError(
+                "mixed 程序的 role 必须是 <民事角色>+<刑事角色>，"
+                f"收到 {role!r}"
+            )
+        return role
+    if role not in _CLI_ROLES.get(proc_type, ()):
+        raise NewCaseError(f"role {role!r} 与程序类型 {proc_type!r} 不匹配")
+    return role
+
+
+def _reject_config_path_controls(value: str) -> None:
+    if "\x00" in value or any(unicodedata.category(char) == "Cc" for char in value):
+        raise NewCaseError("CASES_DIR 不能包含 NUL 或控制字符")
+
+
+def _reject_symlink_components(path: Path) -> None:
+    """Reject symlink components before resolving a configured cases root."""
+    # macOS exposes /private/var through the conventional /var (and /tmp)
+    # aliases.  These fixed system aliases do not represent a user-controlled
+    # parent/target; all other symlink components remain rejected.
+    system_aliases = {Path("/var"), Path("/tmp")}
+    current = Path(path.anchor or os.sep)
+    for part in path.parts:
+        if part in (path.anchor, "", "."):
+            continue
+        if part == "..":
+            current = current.parent
+            continue
+        current = current / part
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise NewCaseError(f"无法检查 CASES_DIR 路径: {current}") from exc
+        if stat.S_ISLNK(info.st_mode) and current not in system_aliases:
+            raise NewCaseError(f"CASES_DIR 路径含符号链接，已拒绝: {current}")
+
+
+def _shared_cases_dir(workspace: Path) -> Path:
+    """Read CASES_DIR through the shared non-executing dotenv reader."""
+    try:
+        from auto_filer.daemon_control import env_value
+
+        configured = env_value(
+            workspace / "auto_filer",
+            "CASES_DIR",
+            str(workspace / "cases"),
+        )
+    except Exception as exc:
+        raise NewCaseError("无法从共享安全配置读取 CASES_DIR") from exc
+
+    if configured == "":
+        configured = str(workspace / "cases")
+    if not isinstance(configured, str):
+        raise NewCaseError("共享配置中的 CASES_DIR 不是文本路径")
+    _reject_config_path_controls(configured)
+    try:
+        raw_path = Path(os.path.expanduser(configured))
+        if not raw_path.is_absolute():
+            raw_path = workspace / raw_path
+        # Inspect the lexical path first so a symlink followed by ``..`` cannot
+        # be normalized into a seemingly safe location.
+        _reject_symlink_components(raw_path)
+        root = Path(os.path.abspath(os.fspath(raw_path)))
+        _reject_symlink_components(root)
+    except (OSError, RuntimeError, ValueError) as exc:
+        if isinstance(exc, NewCaseError):
+            raise
+        raise NewCaseError("共享配置中的 CASES_DIR 路径无效") from exc
+
+    try:
+        info = root.lstat()
+    except FileNotFoundError:
+        return root
+    except OSError as exc:
+        raise NewCaseError(f"无法检查 CASES_DIR: {root}") from exc
+    if stat.S_ISLNK(info.st_mode):
+        raise NewCaseError(f"CASES_DIR 不能是符号链接: {root}")
+    if not stat.S_ISDIR(info.st_mode):
+        raise NewCaseError(f"CASES_DIR 不是目录: {root}")
+    return root
+
+
+def _validate_case_target(root: Path, case_name: str) -> Path:
+    """Check direct-child containment and refuse an existing/symlink target."""
+    target = root / case_name
+    try:
+        root_resolved = root.resolve(strict=False)
+        target_resolved = target.resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise NewCaseError("案件路径无法解析") from exc
+    if target_resolved.parent != root_resolved:
+        raise NewCaseError("案件路径解析后不在 CASES_DIR 的直接子级")
+
+    try:
+        info = target.lstat()
+    except FileNotFoundError:
+        return target
+    except OSError as exc:
+        raise NewCaseError(f"无法检查案件目标: {target}") from exc
+    if stat.S_ISLNK(info.st_mode):
+        raise NewCaseError(f"案件目标是符号链接，已拒绝: {target}")
+    raise NewCaseError(f"案件已存在，不覆盖: {target}")
+
+
+def _ensure_cases_root(root: Path) -> bool:
+    """Create a missing root and return whether this call created it."""
+    try:
+        info = root.lstat()
+    except FileNotFoundError:
+        try:
+            root.mkdir(parents=True, exist_ok=False)
+        except FileExistsError:
+            # A concurrent creator may have won; inspect it below.
+            pass
+        else:
+            _reject_symlink_components(root)
+            return True
+        info = root.lstat()
+    except OSError as exc:
+        raise NewCaseError(f"无法检查 CASES_DIR: {root}") from exc
+
+    if stat.S_ISLNK(info.st_mode):
+        raise NewCaseError(f"CASES_DIR 不能是符号链接: {root}")
+    if not stat.S_ISDIR(info.st_mode):
+        raise NewCaseError(f"CASES_DIR 不是目录: {root}")
+    _reject_symlink_components(root)
+    return False
+
+
+def _remove_owned_path(path: Optional[Path]) -> None:
+    if path is None:
+        return
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        path.unlink()
+    else:
+        shutil.rmtree(path)
+
+
+def _publish_case(staging: Path, target: Path) -> None:
+    """Publish a completed staging tree without replacing an existing target."""
+    created_target = False
+    try:
+        target.mkdir(mode=0o700, exist_ok=False)
+        created_target = True
+        for child in list(staging.iterdir()):
+            destination = target / child.name
+            if os.path.lexists(destination):
+                raise NewCaseError(f"案件目标出现冲突，不覆盖: {destination}")
+            os.rename(child, destination)
+        staging.rmdir()
+    except Exception:
+        if created_target:
+            _remove_owned_path(target)
+        raise
+
+
+def create_case_transaction(cases_dir: Path, data: dict) -> Path:
+    """Build folders and metadata in a sibling staging directory, then publish."""
+    case_name = _validate_cli_case_name(data.get("case_name"))
+    proc_type = _validate_cli_type(data.get("proc_type"))
+    role = _validate_cli_role(proc_type, data.get("role"))
+    data["case_name"] = case_name
+    data["proc_type"] = proc_type
+    data["role"] = role
+
+    root = Path(cases_dir)
+    root_created = _ensure_cases_root(root)
+    target = _validate_case_target(root, case_name)
+    staging: Optional[Path] = None
+    try:
+        staging = Path(tempfile.mkdtemp(prefix=".new-case-", dir=os.fspath(root)))
+        create_folders(staging, proc_type, role)
+        write_meta(staging, data)
+        _reject_symlink_components(root)
+        _validate_case_target(root, case_name)
+        _publish_case(staging, target)
+        staging = None
+        return target
+    except BaseException:
+        try:
+            _remove_owned_path(staging)
+        finally:
+            if root_created:
+                try:
+                    if not root.is_symlink() and not any(root.iterdir()):
+                        root.rmdir()
+                except OSError:
+                    pass
+        raise
+
+
+def _new_case_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="new_case.sh",
+        description="安全创建一个新案件目录和 case_meta.yaml",
+    )
+    parser.add_argument("case_name", help="案件目录名（必须是单一目录名）")
+    parser.add_argument("--type", dest="proc_type", choices=_CLI_TYPES)
+    parser.add_argument("--role", dest="role")
+    parser.add_argument("--party-us", default="")
+    parser.add_argument("--party-op", default="")
+    return parser
+
+
+def _interactive_case_role(proc_type: str) -> str:
+    if proc_type in ("civil", "us_civil"):
+        return ask_choice([
+            ("plaintiff", "Plaintiff / 原告方"),
+            ("defendant", "Defendant / 被告方（含反诉可能）"),
+            ("third-party", "Third-party / 第三人"),
+        ])
+    if proc_type == "arbitration":
+        return ask_choice([
+            ("claimant", "仲裁申请人"),
+            ("respondent", "仲裁被申请人（含反请求可能）"),
+        ])
+    if proc_type == "criminal":
+        return ask_choice([
+            ("suspect", "犯罪嫌疑人 / 被告人方（辩护）"),
+            ("complainant", "被害人 / 报案人方（代理）"),
+        ])
+    civil_role = ask_choice([
+        ("plaintiff", "民事：原告方"),
+        ("defendant", "民事：被告方"),
+        ("third-party", "民事：第三人"),
+    ])
+    criminal_role = ask_choice([
+        ("suspect", "刑事：犯罪嫌疑人 / 被告人方（辩护）"),
+        ("complainant", "刑事：被害人 / 报案人方（代理）"),
+    ])
+    return f"{civil_role}+{criminal_role}"
+
+
+def run_new_case_cli(argv=None) -> int:
+    args = _new_case_parser().parse_args(argv)
+    case_name = _validate_cli_case_name(args.case_name)
+    proc_type = args.proc_type
+    if proc_type is None:
+        proc_type = ask_choice([
+            ("civil", "中国民事诉讼"),
+            ("arbitration", "仲裁（国内 / 国际）"),
+            ("criminal", "中国刑事程序"),
+            ("us_civil", "美国民事诉讼（Federal / State Court）"),
+            ("mixed", "刑民交叉（多程序并行）"),
+        ])
+    _validate_cli_type(proc_type)
+
+    role = args.role if args.role is not None else _interactive_case_role(proc_type)
+    _validate_cli_role(proc_type, role)
+    data = {
+        "case_name": case_name,
+        "abbr": "",
+        "proc_type": proc_type,
+        "role": role,
+        "cause": "",
+        "stage": "",
+        "parties_us": [args.party_us] if args.party_us else [],
+        "parties_op": [args.party_op] if args.party_op else [],
+        "parties_other": [],
+        "keywords": [],
+        "notes": "",
+    }
+    cases_dir = _shared_cases_dir(_WORKSPACE_ROOT)
+    target = create_case_transaction(cases_dir, data)
+    print(f"✅ 案件文件夹已创建: {target}")
+    print(f"   程序类型: {_PROC_ZH.get(proc_type, proc_type)}")
+    print(f"   我方角色: {data['role']}")
+    print(f"   元数据: {target / 'case_meta.yaml'}")
+    return 0
 
 # ── .env 路径更新 ────────────────────────────────────────────
 def update_env_cases_dir(env_path: Path, new_path: str):
@@ -1075,7 +1639,8 @@ def main():
     print(f"  {c('✅ 目录结构已建立', GREEN)}")
 
     print(f"  {c('正在更新 config.yaml...', YELLOW)}")
-    ok = append_case_to_config(cfg_path, data["abbr"], data["case_name"], data["keywords"])
+    ok = append_case_to_config(cfg_path, data["abbr"], data["case_name"], data["keywords"],
+                               case_data=data, cases_dir=cases_dir)
     if ok:
         print(f"  {c('✅ config.yaml 已更新', GREEN)}")
     else:
@@ -1101,6 +1666,15 @@ def main():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--new-case":
+        try:
+            sys.exit(run_new_case_cli(sys.argv[2:]))
+        except KeyboardInterrupt:
+            print(f"\n{c('  已退出', RED)}")
+            sys.exit(130)
+        except (NewCaseError, OSError) as exc:
+            print(f"❌ 创建案件失败: {exc}", file=sys.stderr)
+            sys.exit(1)
     try:
         main()
     except KeyboardInterrupt:

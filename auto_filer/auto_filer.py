@@ -12,10 +12,40 @@
   注意：版本号中间空格，不加点（v0 1 ✓，v0.1 ✗）
 """
 
-import os, sys, re, json, shutil, time, yaml, logging, argparse, subprocess, hashlib
+import os, sys, re, json, shutil, time, yaml, logging, argparse, subprocess, hashlib, signal, threading
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Tuple
+
+try:  # package import
+    from .safety import FileLock, LockBusy, SafetyError, resolve_under, validate_relative_target
+    from .domain import runtime_case_view
+    from .ledger import FilingLedger
+    from .config_io import set_private_umask, tighten_private_permissions
+    from .daemon_control import (
+        DaemonAlreadyRunning, acquire_daemon_instance, unattended_filing_enabled,
+    )
+except ImportError:  # direct script import used by the legacy CLI/tests
+    from safety import FileLock, LockBusy, SafetyError, resolve_under, validate_relative_target
+    from domain import runtime_case_view
+    from ledger import FilingLedger
+    from config_io import set_private_umask, tighten_private_permissions
+    from daemon_control import (
+        DaemonAlreadyRunning, acquire_daemon_instance, unattended_filing_enabled,
+    )
+try:
+    from .decision import (build_filing_decision, SOURCE_OPTIONS,
+                           UNRESOLVED_SOURCE_STATUSES, _keyword_matches)
+except ImportError:
+    from decision import (build_filing_decision, SOURCE_OPTIONS,
+                          UNRESOLVED_SOURCE_STATUSES, _keyword_matches)
+try:
+    from .state_db import DecisionStore
+except ImportError:  # legacy copied CLI bundles may not include optional state DB
+    try:
+        from state_db import DecisionStore
+    except ImportError:
+        DecisionStore = None
 
 # ============================================================
 # 环境变量加载
@@ -379,17 +409,92 @@ class SmartNamer:
         re.compile(r'(材料目录|文件清单|资料清单|附件清单|证据目录)'),
     ]
 
+    # 美国诉讼 PDF 的首页通常先出现法院抬头、律所地址和案号，真正的文书
+    # 标题可能在数十行之后。这里只识别“文种行”，不把法院名称或律所名称
+    # 当作标题。匹配范围保持在前 4,000 字，避免正文中引用其他文书时误命中。
+    US_TITLE_PATTERNS = [
+        re.compile(r"\b(?:FIRST|SECOND|THIRD|AMENDED|VERIFIED|CIVIL|CLASS ACTION|"
+                   r"CONSOLIDATED|SUPPLEMENTAL){0,3}\s*COMPLAINT\b", re.IGNORECASE),
+        re.compile(r"\bANSWER(?:\s+TO\s+(?:THE\s+)?COMPLAINT)?\b", re.IGNORECASE),
+        re.compile(r"\bAFFIRMATIVE DEFENSES\b|\bCOUNTERCLAIMS?\b|\bCROSS-CLAIMS?\b",
+                   re.IGNORECASE),
+        re.compile(r"\bMOTION\s+(?:TO|FOR|IN)\b|\bNOTICE\s+OF\s+MOTION\b",
+                   re.IGNORECASE),
+        re.compile(r"\b(?:MEMORANDUM|BRIEF)\s+(?:OF\s+LAW\s+)?(?:IN\s+SUPPORT|"
+                   r"IN\s+OPPOSITION|IN\s+REPLY)\b", re.IGNORECASE),
+        re.compile(r"\b(?:OPPOSITION|RESPONSE)\s+TO\s+.+MOTION\b|"
+                   r"\bREPLY\s+(?:IN\s+SUPPORT|BRIEF|MEMORANDUM)\b", re.IGNORECASE),
+        re.compile(r"^(?:PROPOSED\s+)?(?:ORDER|JUDGMENT|VERDICT)(?:\b|\s)",
+                   re.IGNORECASE),
+        re.compile(r"\bNOTICE\s+OF\s+APPEAL\b|\bAPPELLATE\s+BRIEF\b",
+                   re.IGNORECASE),
+        re.compile(r"^(?:EXHIBIT|DECLARATION|AFFIDAVIT|DEPOSITION\s+TRANSCRIPT)\b",
+                   re.IGNORECASE),
+        re.compile(r"\b(?:INITIAL\s+DISCLOSURES|INTERROGATORIES|REQUESTS?\s+FOR\s+"
+                   r"PRODUCTION|REQUESTS?\s+FOR\s+ADMISSION|PRIVILEGE\s+LOG)\b",
+                   re.IGNORECASE),
+    ]
+    US_BOILERPLATE = re.compile(
+        r"^(?:IN\s+THE\s+)?UNITED\s+STATES\s+DISTRICT\s+COURT\b|"
+        r"^UNITED\s+STATES\s+COURT\s+OF\s+APPEALS\b|"
+        r"^SUPERIOR\s+COURT\b|^SUPREME\s+COURT\b|"
+        r"^CASE\s+(?:NO\.?|NUMBER)\b|^CIVIL\s+ACTION\s+(?:NO\.?|NUMBER)\b",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def extract_us_title(cls, text: str) -> Optional[str]:
+        """Return the strongest substantive US-litigation title line."""
+        candidates: list[tuple[int, int, str]] = []
+        for index, raw in enumerate((text or "")[:4000].splitlines()):
+            raw = raw.strip()
+            if not raw:
+                continue
+            was_emphasized = raw.startswith(("#", "**", "__"))
+            line = re.sub(r"^[#>*_\s]+|[#>*_\s]+$", "", raw)
+            line = re.sub(r"\s+", " ", line).strip(" |:-")
+            # PDF running footer, e.g. "ANSWER TO COMPLAINT 2. (No. CV...)".
+            line = re.sub(r"\s+\d+\.?\s*\((?:Case\s+)?No\..*$", "", line,
+                          flags=re.IGNORECASE).strip()
+            if not 3 <= len(line) <= 190 or cls.US_BOILERPLATE.search(line):
+                continue
+            if re.search(r"\bCase\s+(?:No\.?|Number)\b|\bDocument\s+\d+\b", line,
+                         re.IGNORECASE):
+                continue
+            matches = [pat for pat in cls.US_TITLE_PATTERNS if pat.search(line)]
+            if not matches:
+                continue
+            letters = [ch for ch in line if ch.isalpha()]
+            upper_ratio = (sum(ch.isupper() for ch in letters) / len(letters)) if letters else 0
+            starts_with_type = bool(re.match(
+                r"^(?:PLAINTIFFS?'?|DEFENDANTS?'?|PETITIONERS?'?|RESPONDENTS?'?)?\s*"
+                r"(?:FIRST\s+|SECOND\s+|AMENDED\s+|VERIFIED\s+|CIVIL\s+)*"
+                r"(?:COMPLAINT|ANSWER|MOTION|NOTICE|ORDER|JUDGMENT|VERDICT|EXHIBIT|"
+                r"DECLARATION|AFFIDAVIT|MEMORANDUM|BRIEF|OPPOSITION|REPLY|"
+                r"INTERROGATORIES|REQUESTS?)\b", line, re.IGNORECASE))
+            # Bold/all-caps and type-leading lines are much more likely to be
+            # document titles than a sentence in the pleading body.
+            score = len(matches) * 35 + (35 if was_emphasized else 0)
+            score += 30 if upper_ratio >= 0.65 else 0
+            score += 25 if starts_with_type else 0
+            score -= min(index, 80) // 8
+            candidates.append((score, -index, line))
+        if not candidates:
+            return None
+        title = max(candidates)[2]
+        return title[:180].rstrip(" .,:;-")
+
     @classmethod
     def extract_title(cls, text: str) -> Optional[str]:
-        """从文本开头500字提取文书标题"""
+        """从文本开头提取中、美及仲裁文书的实质标题。"""
         if not text:
             return None
-        head = text[:500]
+        head = text[:1200]
         for pat in cls.TITLE_PATTERNS:
             m = pat.search(head)
             if m:
                 return m.group(1)
-        return None
+        return cls.extract_us_title(text)
 
     @classmethod
     def extract_heading(cls, text: str, max_len: int = 45) -> Optional[str]:
@@ -461,7 +566,7 @@ class SmartNamer:
         把"目录规范名"放在"OCR标题"之前——命中规则即用统一规范名（如"起诉状"），
         避免把案号/抬头行误当标题（这是"案号当文件名"那类问题的根因）。
 
-        party  = 诉讼主体缩写（手工选，如"雷科达"），auto 模式不臆测、留空。
+        party  = 诉讼主体缩写（手工选，如"示例公司"），auto 模式不臆测、留空。
         batch  = 组次（多次提交的证据等），2→（二）3→（三）…
         """
         date_dt = mtime or datetime.now()
@@ -568,83 +673,101 @@ class SmartNamer:
 # ============================================================
 # 匹配引擎
 # ============================================================
-def match_case(filename: str, content_text: str, cases: list) -> Tuple[Optional[str], Optional[str]]:
-    """
-    评分制匹配，规则：
-      - 案号命中：+10000（最高优先级，直接返回）
-      - 关键词 / 当事人（含别名·曾用名）命中：+100 × len（越长越具体，权重越高）
-      - 法院/仲裁机构命中：+60（多案共用，仅在已有其它命中时加分，决不单独定案）
-    多案件得分相同时视为冲突，返回 (None, None) 交由调用方送「待审核」。
-    诉前/立案阶段常无案号，靠当事人名匹配，故当事人字段必须参与打分。
-    """
-    combined = (filename + " " + content_text).lower()
-    combined_nospace = re.sub(r'\s+', '', combined)
-
-    scores: dict = {}  # case index → score
+def score_case_candidates(filename: str, content_text: str, cases: list) -> list:
+    """生成可解释的案件候选评分；低分或接近分数不自动归档。"""
+    filename_l = (filename or "").lower()
+    text = content_text or ""
+    combined = (filename + " " + text).lower()
+    header = text[:1800].lower()
+    combined_nospace = re.sub(r'[\s　\-—_/]', '', combined)
+    candidates = []
 
     for idx, case in enumerate(cases):
         if case.get("status") == "closed":
             continue
-
-        score = 0
-
-        # 案号匹配（字符串或多审级 dict）
-        cn = case.get("case_number", "")
-        cn_values = list(cn.values()) if isinstance(cn, dict) else ([cn] if cn else [])
-        for cn_val in cn_values:
-            cn_norm = re.sub(r'\s+', '', str(cn_val).lower())
-            if cn_norm and cn_norm in combined_nospace:
+        score, reasons = 0, []
+        numbers = case.get("case_number", "")
+        numbers = list(numbers.values()) if isinstance(numbers, dict) else ([numbers] if numbers else [])
+        for value in numbers:
+            norm = re.sub(r'[\s　\-—_/]', '', str(value).lower())
+            if norm and norm in combined_nospace:
                 score += 10000
-                break  # 同案多个案号只加一次
+                reasons.append(f"案号命中：{value}")
+                break
 
-        # 关键词 + 当事人（party_us/party_op 建卷时已把 全称+别名+曾用名 平铺存好）
-        seen_terms = set()
-        for term in (list(case.get("keywords", []))
-                     + list(case.get("party_us", [])) + list(case.get("party_op", []))):
-            t = (term or "").strip()
-            tl = t.lower()
-            if len(t) >= 2 and tl not in seen_terms and tl in combined:
-                seen_terms.add(tl)
-                score += 100 * len(t)
+        parties = []
+        for key in ("party_us", "party_op", "party_third", "party_court"):
+            value = case.get(key, [])
+            parties.extend(value if isinstance(value, list) else [value])
+        seen = set()
+        for value in parties:
+            term = str(value or "").strip()
+            tl = term.lower()
+            if len(term) < 2 or tl in seen:
+                continue
+            seen.add(tl)
+            if tl in filename_l:
+                score += min(180, 70 + len(term) * 4)
+                reasons.append(f"文件名主体：{term}")
+            elif tl in header:
+                score += min(140, 45 + len(term) * 3)
+                reasons.append(f"首页主体：{term}")
+            elif tl in combined:
+                score += min(45, 8 + len(term))
+                reasons.append(f"正文提及：{term}")
 
-        # 法院/仲裁机构：仅当已有当事人/关键词命中时才加分（不单独定案）
-        if score > 0:
-            court_terms = []
-            for k in ("court_first", "court_second"):
-                v = case.get(k, "")
-                if v:
-                    court_terms.append(v)
-            for k in ("court_first_aliases", "court_second_aliases", "party_court"):
-                v = case.get(k, [])
-                court_terms.extend(v if isinstance(v, list) else [v])
-            if any(ct and len(str(ct)) >= 3 and str(ct).lower() in combined for ct in court_terms):
-                score += 60
+        for value in case.get("keywords", []) or []:
+            term = str(value or "").strip()
+            tl = term.lower()
+            if len(term) < 2:
+                continue
+            if tl in filename_l:
+                score += min(90, 35 + len(term) * 2)
+                reasons.append(f"文件名关键词：{term}")
+            elif tl in header:
+                score += min(60, 25 + len(term))
+                reasons.append(f"首页关键词：{term}")
+            elif tl in combined:
+                score += min(20, 4 + len(term) // 2)
+                reasons.append(f"正文关键词：{term}")
 
-        if score > 0:
-            scores[idx] = score
+        court_terms = []
+        for key in ("court_first", "court_second", "party_court",
+                    "court_first_aliases", "court_second_aliases"):
+            value = case.get(key, "")
+            court_terms.extend(value if isinstance(value, list) else [value])
+        if any(str(value or "").lower() in header for value in court_terms
+               if len(str(value or "")) >= 3):
+            score += 35
+            reasons.append("首页法院/仲裁机构")
 
-    if not scores:
+        if score:
+            candidates.append({"index": idx, "key": case.get("key"),
+                               "name": case.get("name"), "score": score,
+                               "reasons": reasons})
+    return sorted(candidates, key=lambda x: (-x["score"], x["index"]))
+
+
+def match_case(filename: str, content_text: str, cases: list) -> Tuple[Optional[str], Optional[str]]:
+    """纯规则案件匹配：案号确定；其余情况必须达到分数和领先差距阈值。"""
+    candidates = score_case_candidates(filename, content_text, cases)
+    if not candidates:
         return None, None
-
-    max_score = max(scores.values())
-
-    # 案号级别命中（≥10000）：直接返回，不做冲突检测
-    if max_score >= 10000:
-        winner_idx = next(i for i, s in scores.items() if s == max_score)
-        c = cases[winner_idx]
-        return c["key"], c["name"]
-
-    # 关键词级别：检查是否多案同分（冲突）
-    winners = [i for i, s in scores.items() if s == max_score]
-    if len(winners) > 1:
-        # 冲突：返回 None，调用方将文件送「待审核」
+    top = candidates[0]
+    second = candidates[1] if len(candidates) > 1 else None
+    if top["score"] < 60 or (second and top["score"] < 10000
+                              and top["score"] - second["score"] < 20):
         return None, None
-
-    c = cases[winners[0]]
-    return c["key"], c["name"]
+    return top["key"], top["name"]
 
 
-SOURCE_LABELS = {"court": "法院/仲裁机构", "ours": "我方", "opposing": "对方"}
+SOURCE_LABELS = {
+    "ours": "我方", "opposing": "对方", "court": "法院",
+    "tribunal": "仲裁机构", "third_party": "第三方",
+    "expert": "专家/鉴定机构", "police": "公安机关",
+    "prosecutor": "检察机关", "regulator": "监管机构",
+    "internal": "内部材料",
+}
 
 # 落款日期：YYYY年M月D日 / YYYY.M.D / YYYY/M/D / YYYYMMDD
 _SIG_DATE_RE = re.compile(
@@ -761,6 +884,11 @@ def detect_source(content_text: str, case_cfg: dict) -> Optional[str]:
                      "书记员", "合议庭", "仲裁庭认为", "如不服本"]
     zone = t[:300] + t[-300:]
     if any(m in zone for m in court_markers):
+        return "court"
+    # 纯规则识别法院主动发文：通知/传票/判决/裁定等文种与法院机关词在首页共现时，
+    # 即使没有“本院/审判员”落款，也可确定为法院来源；普通代理文书仅提及法院不会满足。
+    court_doc = re.search(r'开庭通知|开庭传票|传票|判决书|裁定书|调解书|受理通知|立案通知|缴费通知', t[:500])
+    if court_doc and re.search(r'(?:人民法院|法院|仲裁委员会|仲裁庭)', t[:500]):
         return "court"
     head_title = t[:40]
     for p in (case_cfg.get("party_court") or []):
@@ -919,7 +1047,7 @@ def _title_key_match(filename: str, rules: list, allowed_sc) -> Optional[dict]:
         if allowed_sc is not None and rule.get("scenario", "通用") not in allowed_sc:
             continue
         for kw in rule.get("title_keywords", []):
-            if kw.lower() in stem and len(kw) > best_len:
+            if _keyword_matches(str(kw), stem) and len(kw) > best_len:
                 best_len = len(kw)
                 best_rule = rule
     return best_rule
@@ -977,27 +1105,43 @@ def match_rule(
     source: Optional[str] = None,
     allowed_scenarios=None,
 ) -> Optional[dict]:
-    """
-    支持三种匹配字段：
-      keywords        — 文件名 + 全文（宽松）
-      title_keywords  — 仅提取的文档标题行（精准）
-      content_keywords— 附加全文过滤条件
-    优先级：顺序匹配，先中先归。
-    allowed_scenarios — 场景硬隔离：只匹配本案场景 + 通用的规则（None 则不隔离）。
-    """
+    """纯规则评分匹配：遍历全部候选，按标题/文件名/正文/来源综合评分。"""
     combined = (filename + " " + content_text).lower()
     title_lower = (extracted_title or "").lower()
-
-    for rule in rules:
+    filename_lower = filename.lower()
+    ranked = []
+    for order, rule in enumerate(rules):
         # 场景硬隔离：跳过不属于本案场景的规则（如 US 案件跳过中文诉讼规则）
         if allowed_scenarios is not None:
             if rule.get("scenario", "通用") not in allowed_scenarios:
                 continue
 
-        kw_match = any(kw.lower() in combined for kw in rule.get("keywords", []))
+        score = 0
+        reasons = []
+        for kw in rule.get("keywords", []):
+            k = str(kw).lower().strip()
+            if not k:
+                continue
+            if _keyword_matches(k, filename_lower):
+                score += min(70, 25 + len(k) * 2)
+                reasons.append(f"文件名关键词：{kw}")
+            elif _keyword_matches(k, title_lower):
+                score += min(100, 45 + len(k) * 3)
+                reasons.append(f"标题关键词：{kw}")
+            elif _keyword_matches(k, combined):
+                score += min(28, 5 + len(k))
+                reasons.append(f"正文关键词：{kw}")
 
-        if not kw_match and title_lower:
-            kw_match = any(kw.lower() in title_lower for kw in rule.get("title_keywords", []))
+        for kw in rule.get("title_keywords", []):
+            k = str(kw).lower().strip()
+            if _keyword_matches(k, title_lower):
+                score += min(120, 60 + len(k) * 3)
+                reasons.append(f"文书标题：{kw}")
+            elif _keyword_matches(k, filename_lower):
+                score += min(80, 35 + len(k) * 2)
+                reasons.append(f"文件名标题：{kw}")
+
+        kw_match = score > 0
 
         ft = rule.get("file_types")
         if ft and kw_match:
@@ -1006,8 +1150,12 @@ def match_rule(
 
         ck = rule.get("content_keywords")
         if ck and kw_match and content_text:
-            if not any(kw.lower() in content_text.lower() for kw in ck):
+            matched_ck = [kw for kw in ck if _keyword_matches(str(kw), content_text)]
+            if not matched_ck:
                 kw_match = False
+            else:
+                score += min(35, 12 * len(matched_ck))
+                reasons.append("正文限定词：" + "、".join(map(str, matched_ck[:3])))
 
         # 来源过滤（软）：仅当"已确定来源"且"规则声明了来源"且两者不一致时才排除；
         # 来源无法确定（source 为 None）时不阻断，规则照常按关键词匹配。
@@ -1016,9 +1164,20 @@ def match_rule(
             kw_match = False
 
         if kw_match:
-            return rule
+            if rsrc and source == rsrc:
+                score += 30
+                reasons.append(f"来源匹配：{source}")
+            ranked.append((score, order, rule, reasons))
 
-    return None
+    if not ranked:
+        return None
+    ranked.sort(key=lambda x: (-x[0], x[1]))
+    # 将命中依据挂到规则副本上，供日志和前台解释，不改变 YAML 原对象。
+    best_score, _order, best_rule, reasons = ranked[0]
+    result = dict(best_rule)
+    result["_match_score"] = best_score
+    result["_match_reasons"] = reasons
+    return result
 
 # ============================================================
 # 手工预填辅助
@@ -1230,6 +1389,70 @@ def _append_archive_log(config: dict, entry: dict):
     except Exception:
         pass
 
+
+def _upload_audit_fields(override: dict) -> dict:
+    """Return non-content upload context that should survive sidecar deletion."""
+    if not isinstance(override, dict):
+        return {}
+    return {
+        key: override[key]
+        for key in ("batch_id", "original_relative_path", "context_path", "stage")
+        if override.get(key)
+    }
+
+
+def _remove_created_links(metadata: Optional[dict], destination: Path) -> None:
+    """Remove only newly-created links that still point at this destination."""
+    if not isinstance(metadata, dict):
+        return
+    links = metadata.get("links", [])
+    if not isinstance(links, list):
+        return
+    try:
+        destination_resolved = Path(destination).expanduser().resolve(strict=False)
+    except (OSError, RuntimeError, ValueError):
+        return
+
+    for raw_link in links:
+        if not isinstance(raw_link, str) or not raw_link:
+            continue
+        try:
+            link = Path(raw_link).expanduser()
+            if not link.is_absolute() or not link.is_symlink():
+                continue
+            if link.resolve(strict=True) != destination_resolved:
+                continue
+            os.unlink(str(link))
+        except (OSError, RuntimeError, ValueError):
+            continue
+
+
+def _record_ledger(config: dict, source: Path, destination: Path, *, action: str,
+                   metadata: Optional[dict] = None) -> Optional[str]:
+    """Record a completed move; roll it back if the ledger cannot commit."""
+    try:
+        log_dir = Path(config.get("global", {}).get("log_dir") or "logs")
+        return FilingLedger(log_dir / "filing_ledger.sqlite3").record_move(
+            source, destination, action=action, metadata=metadata or {})
+    except Exception:
+        _remove_created_links(metadata, destination)
+        try:
+            if destination.exists() and not source.exists():
+                source.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(str(destination), str(source))
+        except Exception:
+            pass
+        return None
+
+
+def _associated_case_root(case_cfg: dict, config: dict) -> Path:
+    """Resolve a linked case's actual root, honoring an explicit import path."""
+    import_path = case_cfg.get("import_path")
+    if import_path and str(import_path).strip():
+        return Path(import_path).expanduser().resolve()
+    return (Path(case_cfg.get("cases_dir") or config["global"]["case_root"])
+            / case_cfg["name"]).expanduser().resolve()
+
 # ============================================================
 # 分层归档：把旧的"扁平类别 target"映射成"审级/阶段 + 类别"
 # 仅对 config 里标了 layout: staged / staged_arb 的新案件生效；
@@ -1408,18 +1631,186 @@ def _map_arb_target(target: str) -> Optional[str]:
     return None
 
 
+# ── 紧凑目录映射 v2 ─────────────────────────────────────────
+# 规则中的具体文书 target 继续作为“逻辑分类”；物理目录只保留材料大类。
+# 先保存旧映射，供存量 layout: staged 案件继续使用。
+_map_civil_target_legacy = _map_civil_target
+_map_arb_target_legacy = _map_arb_target
+_map_crim_target_legacy = _map_crim_target
+
+_COMPACT_LAYOUTS = {"staged_compact", "staged_arb_compact", "staged_crim_compact",
+                    "staged_mixed_compact"}
+
+def _compact_common_target(target: str) -> str:
+    if not target:
+        return target
+    # 版本由文件名表达，不再建立“过程稿/内部定稿/提交版”目录。
+    target = re.sub(r'/(?:过程稿|内部定稿|提交版)$', '', target)
+    if target.startswith("01_案件资料/客户提供材料/"):
+        return "01_案件资料/客户提供材料"
+    if target.startswith("12_内部工作文件/案件策略/"):
+        return "12_内部工作文件/案件策略"
+    if target.startswith("09_跨境协作/境外诉讼仲裁/"):
+        return "09_跨境协作/境外诉讼仲裁"
+    return target
+
+
+def _map_civil_target(target: str, stage: str) -> Optional[str]:
+    target = _compact_common_target(target)
+    parts = target.split("/")
+    top, rest = parts[0], "/".join(parts[1:])
+    if target.startswith("00_签约与委托/授权委托书"):
+        return f"{stage}/授权委托与所函"
+    if top == "03_证据":
+        if "我方证据" in rest:
+            return f"{stage}/证据/我方证据"
+        if "对方证据" in rest:
+            return f"{stage}/证据/对方证据"
+        return f"{stage}/证据/质证与交换"
+    if top == "04_诉讼文书":
+        doc = rest.split("/")[0] if rest else ""
+        if doc in ("法院来文", "送达文件"):
+            return f"{stage}/法院文书"
+        return f"{stage}/诉讼文书"
+    if top == "05_庭审":
+        return f"{stage}/庭审"
+    if top == "06_专家工作":
+        return f"{stage}/专家工作"
+    if top == "07_和解与调解":
+        return f"{stage}/和解调解"
+    if top == "08_判决与执行":
+        doc = rest.split("/")[0] if rest else ""
+        if "执行" in doc:
+            return f"06_执行/执行文书"
+        if "上诉" in doc:
+            return "04_二审/诉讼文书"
+        return f"{stage}/判决裁定"
+    return target
+
+
+def _map_arb_target(target: str) -> Optional[str]:
+    target = _compact_common_target(target)
+    parts = target.split("/")
+    top, rest = parts[0], "/".join(parts[1:])
+    if target.startswith("00_签约与委托/授权委托书"):
+        return "03_仲裁/授权委托与所函"
+    if top == "03_证据":
+        if "我方证据" in rest:
+            return "03_仲裁/证据/我方证据"
+        if "对方证据" in rest:
+            return "03_仲裁/证据/对方证据"
+        return "03_仲裁/证据/质证与交换"
+    if top == "04_仲裁文书":
+        if "机构函件" in rest:
+            return "03_仲裁/仲裁机构文书"
+        return "03_仲裁/仲裁文书"
+    if top == "05_庭审": return "03_仲裁/庭审"
+    if top == "06_专家工作": return "03_仲裁/专家工作"
+    if top == "07_和解与调解": return "03_仲裁/和解调解"
+    if top == "08_裁决与执行":
+        doc = rest.split("/")[0] if rest else ""
+        if "裁决" in doc: return "03_仲裁/裁决"
+        if "撤裁" in doc or "不予执行" in doc or "承认" in doc:
+            return "04_司法审查/申请与答辩"
+        return "05_执行/执行文书"
+    return target
+
+
+def _map_crim_target(target: str, stage: str, content: str = ""):
+    target = _compact_common_target(target)
+    # 先按具体刑事文种纠正阶段，再归入该阶段的大类。
+    c = (content or "") + " " + target
+    if re.search(r"减刑|假释|监外执行|收监|交付执行|执行通知书", c):
+        return "08_执行阶段/减刑假释与变更执行"
+    if re.search(r"申诉书|申请再审|再审", c):
+        return "07_再审与申诉/申诉与再审材料"
+    if re.search(r"上诉状|抗诉", c):
+        return "06_二审/上诉与抗诉"
+    if re.search(r"起诉书|量刑建议|不起诉|审查起诉|认罪认罚|退回补充侦查", c):
+        return "04_审查起诉阶段/检察机关文书"
+    if re.search(r"拘留|逮捕|取保候审|监视居住|羁押必要性|立案决定|侦查", c):
+        return "03_侦查阶段/机关文书"
+    if target.startswith("03_证据"):
+        return f"{stage}/证据材料"
+    if target.startswith("05_庭审"):
+        return f"{stage}/庭审"
+    if target.startswith("06_专家工作"):
+        return "05_一审/证据与鉴定"
+    if target.startswith("04_诉讼文书") or target.startswith("08_判决与执行"):
+        return f"{stage}/法院文书" if "判决" in c or "裁定" in c else f"{stage}/辩护与代理材料"
+    if target.startswith("CR_"):
+        if "侦查" in target: return "03_侦查阶段/律师材料"
+        if "审查起诉" in target: return "04_审查起诉阶段/律师材料"
+        if "审判" in target: return "05_一审/辩护与代理材料"
+        if "执行" in target: return "08_执行阶段/执行机关文书"
+    return target
+
+
+def _map_us_target(target: str) -> str:
+    target = _compact_common_target(target)
+    parts = target.split("/")
+    if len(parts) < 2:
+        return target
+    top, rest = parts[0], parts[1:]
+    if top == "01_Case Materials" and rest[0] in ("Client-Provided Materials", "Attorney-Gathered Materials"):
+        return f"{top}/{rest[0]}"
+    if top in ("03_Opposing Party Filings", "04_Our Filings", "{us_party_filings}"):
+        if rest[0].startswith("Pleadings"): bucket = "Pleadings"
+        elif rest[0].startswith("Motions"): bucket = "Motions & Briefs"
+        elif rest[0].startswith("Discovery"): bucket = "Discovery"
+        else: bucket = "Pretrial Submissions"
+        return f"{top}/{bucket}"
+    if top == "05_Discovery & Doc Review": return f"{top}/{rest[0]}"
+    if top == "06_Experts": return f"{top}/{rest[0]}"
+    if top == "07_Trial": return f"{top}/{rest[0]}"
+    if top == "08_Court Documents":
+        if rest[0] in ("Summons & Service", "Hearing Notices", "Case Management Order", "Court Orders"):
+            return f"{top}/Orders & Notices" if rest[0] != "Summons & Service" else f"{top}/Service & Summons"
+        return f"{top}/{rest[0]}"
+    if top == "09_Settlement":
+        return f"{top}/Negotiations" if rest[0] == "Settlement Negotiations" else f"{top}/Agreements & Dismissal"
+    if top == "10_Appeal":
+        if rest[0] == "Appellate Briefs": return f"{top}/Appellate Briefs"
+        if rest[0] in ("Notice of Appeal", "Record on Appeal"): return f"{top}/Notice & Record"
+        return f"{top}/Oral Argument"
+    if top == "11_Cross-Border":
+        if rest[0] == "Foreign Counsel Correspondence": return f"{top}/Foreign Counsel"
+        if rest[0] == "Foreign Law Opinions": return f"{top}/Foreign Law"
+        return f"{top}/{rest[0]}"
+    if top == "12_Client Communications": return f"{top}/Email & Drafting" if rest[0] in ("Email Correspondence", "Email Summaries") else f"{top}/Meetings & Reports"
+    if top == "13_Billing & Time": return f"{top}/Time Records" if rest[0] == "Time Records" else f"{top}/Expenses & Invoices"
+    if top == "14_Internal Work Files": return f"{top}/Case Strategy" if rest[0] == "Case Strategy" else f"{top}/Work Log & Templates"
+    return target
+
+
 def _apply_stage(case_cfg: dict, target: str, content_text: str = "",
                  ov_stage: str = None) -> str:
     """把扁平 target 转成分层 target。仅 layout: staged* 生效；否则原样返回。"""
     layout = (case_cfg or {}).get("layout", "") or ""
-    if not layout.startswith("staged") or not target:
+    if not target:
         return target
-    crim = layout.endswith("crim")
+    if layout == "us_civil":
+        return _map_us_target(target)
+    if not layout.startswith("staged"):
+        return _compact_common_target(target)
+    compact = layout in _COMPACT_LAYOUTS
+    if compact:
+        target = _compact_common_target(target)
+        top = target.split("/")[0]
+    crim = layout.startswith("staged_crim")
     top = target.split("/")[0]
     # 案件级目录：原样。例外：民事/仲裁的 00 授权委托书下沉到各审级；刑事保持案件级。
     if top in _CASEWIDE_TOPS:
         if crim or not target.startswith("00_签约与委托/授权委托书"):
             return target
+    if layout == "staged_mixed_compact" and top in {
+        "CR_侦查阶段", "CR_审查起诉阶段", "CR_审判阶段", "CR_上诉申诉", "CR_执行阶段",
+    }:
+        stage = (_stage_from_casenum_crim(content_text, case_cfg.get("case_numbers"))
+                 or _CRIM_STAGE_FOLDER.get(case_cfg.get("stage"))
+                 or "03_侦查阶段")
+        mapper = _map_crim_target if compact else _map_crim_target_legacy
+        return mapper(target, stage, content_text) or target
     if crim:
         # 刑事：定阶段（手动 > 案号 > 案件当前阶段 > 默认侦查）；自带阶段文种在 _map 内纠正
         stage = ((_CRIM_STAGE_FOLDER.get(ov_stage) if ov_stage else None)
@@ -1427,14 +1818,16 @@ def _apply_stage(case_cfg: dict, target: str, content_text: str = "",
                  or _CRIM_STAGE_FOLDER.get(case_cfg.get("stage"))
                  or "03_侦查阶段")
         return _map_crim_target(target, stage, content_text) or target
-    if layout.endswith("arb"):
-        return _map_arb_target(target) or target
+    if layout.startswith("staged_arb"):
+        mapper = _map_arb_target if compact else _map_arb_target_legacy
+        return mapper(target) or target
     # 民事：定阶段（手动 > 案号 > 案件当前阶段 > 默认一审）；自带审级的文种在 _map 内再纠正
     stage = ((_STAGE_FOLDER.get(ov_stage) if ov_stage else None)
              or _stage_from_casenum(content_text, case_cfg.get("case_numbers"))
              or _STAGE_FOLDER.get(case_cfg.get("stage"))
              or "03_一审")
-    return _map_civil_target(target, stage) or target
+    mapper = _map_civil_target if compact else _map_civil_target_legacy
+    return mapper(target, stage) or target
 
 
 # ── 层级序号：把 core 目标路径解析成真实(带 A -/1. 前缀)目录；与未编号存量案件兼容 ──
@@ -1465,8 +1858,10 @@ def _decorate_new(parent: Path, core: str, depth: int) -> str:
 
 def _resolve_dest(base: Path, relpath: str) -> Path:
     """core 目标路径 → 真实目录路径（前缀无关匹配；缺失则按层级前缀新建）。"""
+    validate_relative_target(relpath, "目标目录")
+    base = Path(base).expanduser().resolve()
     cur = base
-    for depth, seg in enumerate(s for s in relpath.split("/") if s):
+    for depth, seg in enumerate(relpath.split("/")):
         core = _core_seg(seg)
         match = None
         if cur.exists():
@@ -1475,13 +1870,13 @@ def _resolve_dest(base: Path, relpath: str) -> Path:
                     match = ch
                     break
         cur = match if match is not None else (cur / _decorate_new(cur, core, depth))
-    return cur
+    return resolve_under(base, cur)
 
 
 # ============================================================
 # 单文件处理
 # ============================================================
-def process_file(
+def _process_file_unlocked(
     file_path: Path, config: dict, logger: logging.Logger, dry_run: bool = False
 ) -> Optional[str]:
     if not file_path.is_file():
@@ -1509,7 +1904,7 @@ def process_file(
         except Exception:
             override = {}
         if override:
-            logger.info(f"   ✍ 人工预填: {override}")
+            logger.info(f"   ✍ 投放上下文: {override}")
 
     # 手工已指定 案件+类型 → 无需读内容，跳过 OCR（手工为主路径，省去等待）
     fully_manual = bool(override.get("case_key") and override.get("target"))
@@ -1525,48 +1920,60 @@ def process_file(
             tail_pages=2,
         )
         if content_text.strip():
-            logger.debug(f"   内容(md): {content_text[:120].replace(chr(10), ' ')}...")
+            # Keep document text in memory for classification only; verbose
+            # logs must never contain material正文.
+            logger.debug("   已提取材料文本（正文不写入日志）")
         # 标题：优先从 Markdown H1/H2 提取，回落到 SmartNamer 正则模式
-        extracted_title = (extract_title_from_markdown(content_text)
-                           or SmartNamer.extract_title(content_text)
+        # Prefer a recognized legal-document title over a promoted metadata
+        # heading (for example an案号 on the first line); the decision preview
+        # and the move must therefore see the same document candidate.
+        extracted_title = (SmartNamer.extract_title(content_text)
+                           or extract_title_from_markdown(content_text)
                            or SmartNamer.extract_heading(content_text))
         if extracted_title:
             logger.debug(f"   标题: {extracted_title}")
 
-    llm_cfg = config.get("llm", {})
-    _min_conf = float(llm_cfg.get("min_confidence", 0.6))
+    # Phase 2 decision pass: produce a conservative, explainable snapshot
+    # before the legacy path builder runs.  This pass never touches the file.
+    try:
+        decision_preview = build_filing_decision(
+            filename, content_text, config.get("cases", []), config.get("rules", []),
+            extracted_title=extracted_title, manual=override,
+            received_at=override.get("date"),
+        )
+        try:
+            log_dir = Path(config.get("global", {}).get("log_dir") or "logs")
+            decision_preview = DecisionStore(
+                log_dir.expanduser().resolve().parent / "state" / "loci.db"
+            ).save(decision_preview)
+        except Exception as store_exc:
+            # The snapshot improves auditability but must not expose document
+            # text or stop legacy offline filing if its local store is unavailable.
+            logger.warning("   ⚠ 决策快照未保存：%s", type(store_exc).__name__)
+    except Exception as exc:
+        decision_preview = {}
+        logger.debug(f"   决策预分析跳过：{exc}")
 
-    # ① 案件：人工预填 > 关键词匹配 > LLM辅助识别
+    # ① 案件：人工预填 > 本地规则评分；无法确定时挂起人工复核。
     ov_case = override.get("case_key")
     if ov_case:
         case_cfg = next((c for c in config.get("cases", []) if c.get("key") == ov_case), {})
         case_key, case_name = (ov_case, case_cfg.get("name")) if case_cfg else (None, None)
         logger.info(f"   🏷 案件(人工): {case_name or '⚠ 预填案件不存在 → _未分类'}")
     else:
-        case_key, case_name = match_case(filename, content_text, config.get("cases", []))
+        selected = (decision_preview.get("matter") or {}).get("selected")
+        case_status = (decision_preview.get("matter") or {}).get("status")
+        if selected and case_status == "selected":
+            case_key, case_name = selected.get("key"), selected.get("name")
+        else:
+            # Unknown/close case candidates must not be resolved by config
+            # order.  They remain in _未分类 for explicit case selection.
+            case_key, case_name = None, None
         case_cfg = next((c for c in config.get("cases", []) if c.get("key") == case_key), {})
         if case_key:
             logger.info(f"   🏷 案件: {case_name}")
-        elif llm_cfg.get("enabled") and content_text.strip():
-            # 关键词未命中 → LLM 从案件清单中选
-            try:
-                from llm_classify import llm_case_match
-                lc = llm_case_match(content_text, filename,
-                                    config.get("cases", []), llm_cfg)
-                if lc and lc.get("confidence", 0) >= _min_conf:
-                    case_key = lc["case_key"]
-                    case_cfg = next(
-                        (c for c in config.get("cases", []) if c.get("key") == case_key), {}
-                    )
-                    case_name = case_cfg.get("name")
-                    logger.info(f"   🤖 案件(LLM): {case_name} "
-                                f"(conf {lc['confidence']:.2f})")
-                else:
-                    logger.info("   🏷 ⚠ 未识别案件 → _未分类")
-            except Exception as e:
-                logger.info(f"   ⚠ LLM案件识别失败：{e}")
         else:
-            logger.info("   🏷 ⚠ 未识别案件 → _未分类")
+            logger.info("   🏷 ⚠ 案件未达到确定阈值 → _未分类（待人工选择）")
 
     # 送达附随文件：用主文件名兜底识别案件
     if not case_key and _delivery_base:
@@ -1578,25 +1985,29 @@ def process_file(
     # 诉讼主体（手工选的当事人缩写，用于命名；并可反推来源）
     party = override.get("party") or None
 
-    # ③ 来源：人工来源 > 由所选主体反推 > 文件名当事人 > 内容分析
-    source = (override.get("source")
-              or _party_to_source(party, case_cfg)
-              or detect_source(content_text, case_cfg)
-              or _detect_source_from_sigpage(file_path, case_cfg)
-              or _source_from_filename(filename, case_cfg))
+    # ③ 来源：Decision 是自动分析与实际移动共用的唯一事实源。
+    # 人工 target 本身不构成来源事实；只有明确的 manual.source 才能越过
+    # 全局来源门控。旧版签名页/文件名兜底不在这里另行覆盖 preview。
+    decision_source = decision_preview.get("source") or {}
+    source = (decision_source.get("kind")
+              if decision_source.get("status") in {"inferred", "manual"}
+              else None)
     if source:
-        tag = "(人工)" if (override.get("source") or party) else ""
+        tag = "(人工)" if decision_source.get("status") == "manual" else ""
         logger.info(f"   📨 来源{tag}: {SOURCE_LABELS.get(source, source)}")
     # 来源已知时自动取当事人缩写作为命名主体（override.party 优先，未填则自动推）
     if not party and source:
         party = _source_label(source, case_cfg)
 
-    # ② 文件类型：人工预填 > LLM 首轮判定（读懂材料性质）> 关键词规则兜底 > 待分类
+    # ② 文件类型：人工预填 > 本地规则评分 > 待分类
     #    场景硬隔离：按本案场景过滤规则，避免跨场景误归（如 US 文件被中文规则截胡）
     allowed_sc = _allowed_scenarios(case_cfg)
     ov_target = override.get("target")
     llm_doc_type  = None
-    llm_title     = None
+    # Despite the legacy variable name this is a local, deterministic title
+    # extraction result.  It is used only after the decision engine confirms
+    # the semantic document candidate.
+    llm_title     = extracted_title or None
     rule          = None
     target_subdir = None
     fname_doc_type = None   # doc_type从文件名精准匹配中提取，优先于内容识别
@@ -1620,10 +2031,10 @@ def process_file(
         pre_rule = _title_key_match(filename, config.get("rules", []), allowed_sc)
         _from_title_match = False
         if pre_rule and not _delivery_base:
-            target_subdir = pre_rule["target"]
+            # 文件名命中只作为候选和命名提示，不再绕过全文规则评分。
             rule = pre_rule
             _from_title_match = True
-            logger.info(f"   📂 归类(文件名精准): {target_subdir}")
+            logger.info(f"   🔎 文件名候选: {pre_rule['target']}（继续进行规则评分）")
             # 从文件名里提取到的最具体的文书类型名，用于命名（优先于内容title抽取）
             _stem_lower = Path(filename).stem.lower()
             # 取最长匹配的 title_keyword（越长越具体，防止"申请书"盖过"变更诉讼请求申请书"）
@@ -1636,149 +2047,108 @@ def process_file(
             # 取更具体（更长）的那个：文件名匹配词 vs 规则规范名
             fname_doc_type = _rp if len(_rp) > len(_matched_kw or "") else _matched_kw
 
-        # 首轮：本地 LLM 读内容、理解材料性质后判定
-        llm_res = None
-        if not target_subdir and llm_cfg.get("enabled") and case_name and content_text.strip():
-            try:
-                from llm_classify import llm_doctype, llm_pick_folder
-                # 清单 = 案件磁盘真实文件夹 ∪ 本场景规则目标（合法去处全列出，
-                # 选中了但文件夹还没建的，归档时会自动创建）
-                _cf = Path(case_cfg.get("cases_dir") or config["global"]["case_root"]) / case_name
-                catset = set()
-                real_tops = set()
-                if _cf.exists():
-                    for p in _cf.rglob("*"):
-                        rel = p.relative_to(_cf)
-                        if p.is_dir() and not any(s.startswith((".", "_")) for s in rel.parts):
-                            core_rel = "/".join(_core_seg(s) for s in rel.parts)  # 去层级序号 → 与规则/流水线核心名一致
-                            catset.add(core_rel)
-                            real_tops.add(core_rel.split("/")[0])
-                for r in config.get("rules", []):
-                    if allowed_sc is None or r.get("scenario", "通用") in allowed_sc:
-                        t = r["target"]
-                        # 只并入与本案真实结构同顶层的规则目标，避免中/英文结构互相污染
-                        if not real_tops or t.split("/")[0] in real_tops:
-                            catset.add(t)
-                # 去掉父级文件夹，只留"叶子"目标（清单更小更清晰，减少误选）
-                catalog = sorted(f for f in catset
-                                 if not any(g != f and g.startswith(f + "/") for g in catset))
-                # 文件夹归档指引（folder_guide.yaml）
-                guide = {}
-                _gp = Path(__file__).parent / "folder_guide.yaml"
-                if _gp.exists():
-                    try:
-                        guide = yaml.safe_load(_gp.read_text(encoding="utf-8")) or {}
-                    except Exception:
-                        guide = {}
-
-                # ── Stage 1：识别文书类型 ──────────────────────────────────
-                dt_res = llm_doctype(content_text, filename, llm_cfg, case_cfg)
-                if dt_res:
-                    _src_for_map = source or dt_res.get("source") or "unknown"
-                    llm_res = {
-                        "doc_type":   dt_res["doc_type"],
-                        "title":      dt_res.get("title"),
-                        "source":     dt_res.get("source"),
-                        "confidence": dt_res["confidence"],
-                        "target":     None,
-                    }
-                    # ── Stage 1.5：映射表查询（命中则跳过 Stage 2 LLM）────
-                    mapped = _doctype_map_lookup(dt_res["doc_type"], _src_for_map)
-                    if mapped:
-                        llm_res["target"] = mapped
-                        logger.info(f"   📋 映射表命中: {mapped}"
-                                    f"（类型『{dt_res['doc_type']}』）")
-                    else:
-                        # ── Stage 2：LLM 从候选清单选文件夹（仅在映射表未命中时调用）
-                        pick = llm_pick_folder(
-                            dt_res["doc_type"], _src_for_map, catalog, llm_cfg, guide)
-                        if pick:
-                            llm_res["target"] = pick["target"]
-                            llm_res["confidence"] = min(
-                                dt_res["confidence"], pick["confidence"])
-            except Exception as e:
-                logger.info(f"   ⚠ LLM 调用失败：{e}")
-
-        _min = _min_conf
-        if llm_res:
-            # 两段式：①LLM 给出的文书类型用于命名；②映射到文件夹
-            llm_doc_type = llm_res.get("doc_type")
-            llm_title    = llm_res.get("title")  # LLM 抓取的原始文件标题（更具体）
-            if not source and llm_res.get("source"):
-                source = llm_res["source"]
-            if llm_res.get("target") and llm_res["confidence"] >= _min:
-                target_subdir = llm_res["target"]
-                # 从 LLM 选中的路径反推来源（当 doctype 阶段 source=unknown 时兜底）
-                if not source:
-                    if "对方证据" in target_subdir:
-                        source = "opposing"
-                    elif "我方证据" in target_subdir:
-                        source = "ours"
-                logger.info(f"   🤖 LLM 归类: {target_subdir}"
-                            f"（类型『{llm_doc_type}』 conf {llm_res['confidence']:.2f}）")
-            elif llm_doc_type:
-                # 第②段没选中清单 → 用"干净的文书类型"跑关键词规则映射（不带正文杂词，更准）
-                rule = match_rule("", llm_doc_type, config.get("rules", []),
-                                  llm_doc_type, source, allowed_sc)
-                if rule:
-                    target_subdir = rule["target"]
-                    logger.info(f"   🤖 类型『{llm_doc_type}』+规则映射 → {target_subdir}")
-                else:
-                    target_subdir = config.get("fallback", {}).get("target", "_待分类")
-                    logger.info(f"   📂 类型『{llm_doc_type}』未匹配文件夹 → {target_subdir}（进复核）")
+        if not target_subdir:
+            rule = match_rule(filename, content_text, config.get("rules", []),
+                              extracted_title, source, allowed_sc)
+            if rule:
+                target_subdir = rule["target"]
+                logger.info(f"   📂 归类(规则评分 {rule.get('_match_score', 0)}): {target_subdir}")
+                if rule.get("_match_reasons"):
+                    logger.info("   ↳ 依据: " + "；".join(rule["_match_reasons"][:5]))
             else:
                 target_subdir = config.get("fallback", {}).get("target", "_待分类")
                 logger.info(f"   📂 未识别 → {target_subdir}（进待办复核）")
+
+        # The side-effect-free decision is the final logical preview.  Keep
+        # the legacy matcher above for naming hints and compatibility, but do
+        # not let it choose a different destination from the preview.
+        ddoc = (decision_preview.get("document_type") or {})
+        selected_ddoc = ddoc.get("selected")
+        ddest = decision_preview.get("destination") or {}
+        d_matter = (decision_preview.get("matter") or {}).get("selected") or {}
+        decision_matches_case = bool(case_key and d_matter.get("key") == case_key)
+        if decision_matches_case or (not case_key and not d_matter):
+            candidate_target = ((selected_ddoc or {}).get("target")
+                                or ddest.get("pending_target")
+                                or ddest.get("relative")
+                                or config.get("fallback", {}).get("target", "_待分类"))
+            if selected_ddoc:
+                selected_rule = next((r for r in config.get("rules", [])
+                                      if r.get("target") == selected_ddoc.get("target")), None)
+                # A neutral US placeholder deliberately has no side-specific
+                # YAML rule.  Do not retain the earlier first-in-config rule,
+                # otherwise its "(Opposing)" rename pattern leaks into a
+                # source-unknown or our-side filename.
+                if (selected_rule is None or pre_rule is None
+                        or pre_rule.get("target") != selected_rule.get("target")):
+                    fname_doc_type = None
+                rule = selected_rule
+                llm_doc_type = selected_ddoc.get("name") or llm_doc_type
+            elif ddoc.get("status") != "selected":
+                rule = None
+                fname_doc_type = None
+
+            source_unresolved = (decision_source.get("status")
+                                 in UNRESOLVED_SOURCE_STATUSES)
+            target_subdir = ddest.get("relative") or "_待分类"
+            pending_target = ddest.get("pending_target") if source_unresolved else None
+            if case_key and source_unresolved:
+                pending_target = pending_target or candidate_target
+                pending_target = (pending_target.replace("我方证据", "{side}")
+                                  .replace("对方证据", "{side}"))
+                target_subdir = "_待确认来源"
+                logger.info(f"   ❓ 来源未确定 → 挂起 _待确认来源（确认后归: {pending_target}）")
+            elif not case_key:
+                # Unknown matters remain in _未分类 even when source is also
+                # unresolved; source confirmation needs a known matter.
+                target_subdir = "_未分类"
+                pending_target = None
+            elif ddoc.get("status") == "selected":
+                logger.info(f"   🛡 决策预览目标：{target_subdir}")
+            else:
+                logger.info("   🛡 文书性质证据不足或存在交叉候选 → 待分类复核")
         else:
-            # LLM 未启用 / 不可用 → 关键词规则兜底（pre_rule 已命中时跳过）
-            if not target_subdir:
-                rule = match_rule(filename, content_text, config.get("rules", []),
-                                  extracted_title, source, allowed_sc)
-                if rule:
-                    target_subdir = rule["target"]
-                    logger.info(f"   📂 归类(规则): {target_subdir}")
-                else:
-                    target_subdir = config.get("fallback", {}).get("target", "_待分类")
-                    logger.info(f"   📂 未识别 → {target_subdir}（进待办复核）")
+            # A delivery-suffix fallback can identify a matter after the
+            # initial preview.  Preserve that legacy path, but still enforce
+            # the same global source gate conservatively.
+            candidate_target = target_subdir or config.get("fallback", {}).get("target", "_待分类")
+            source_unresolved = (decision_source.get("status")
+                                 in UNRESOLVED_SOURCE_STATUSES
+                                 or not decision_source)
+            pending_target = None
+            if case_key and source_unresolved:
+                pending_target = (candidate_target.replace("我方证据", "{side}")
+                                  .replace("对方证据", "{side}"))
+                target_subdir = "_待确认来源"
+                logger.info(f"   ❓ 来源未确定 → 挂起 _待确认来源（确认后归: {pending_target}）")
 
-    # 确定性兜底：我方/对方证据 完全由来源决定，模型常搞混 → 按来源强制纠正
-    #（仅非人工指定时；人工选的最高优先不动）
-    if not ov_target and source in ("ours", "opposing") and "03_证据/" in target_subdir:
-        want, other = ("我方证据", "对方证据") if source == "ours" else ("对方证据", "我方证据")
-        if f"03_证据/{other}" in target_subdir:
-            target_subdir = target_subdir.replace(other, want)
-            logger.info(f"   ↪ 按来源({SOURCE_LABELS.get(source)})纠正证据归属 → {target_subdir}")
+    # The manual-target branch does not enter the legacy matcher above, but it
+    # is still subject to the same source gate.  In particular, target alone
+    # must not be treated as a source override.
+    if ov_target:
+        ddoc = (decision_preview.get("document_type") or {})
+        selected_ddoc = ddoc.get("selected") or {}
+        ddest = decision_preview.get("destination") or {}
+        candidate_target = (selected_ddoc.get("target") or ov_target)
+        llm_doc_type = selected_ddoc.get("name") or override.get("doc_type") or llm_doc_type
+        source_unresolved = (decision_source.get("status")
+                             in UNRESOLVED_SOURCE_STATUSES)
+        if not case_key:
+            target_subdir = "_未分类"
+            pending_target = None
+        elif source_unresolved:
+            pending_target = (ddest.get("pending_target") or candidate_target)
+            pending_target = (pending_target.replace("我方证据", "{side}")
+                              .replace("对方证据", "{side}"))
+            target_subdir = "_待确认来源"
+            logger.info(f"   ❓ 来源未确定 → 挂起 _待确认来源（确认后归: {pending_target}）")
+        else:
+            target_subdir = ddest.get("relative") or candidate_target
+            pending_target = None
 
-    # 来源未确定，但归属取决于来源（我方/对方证据）→ 不瞎归类，挂起待人工确认来源
-    pending_target = None
-    if (not ov_target and source not in ("ours", "opposing")
-            and ("我方证据" in target_subdir or "对方证据" in target_subdir)):
-        pending_target = target_subdir.replace("我方证据", "{side}").replace("对方证据", "{side}")
-        target_subdir = "_待确认来源"
-        logger.info(f"   ❓ 来源未确定 → 挂起 _待确认来源（确认后归: {pending_target}）")
-
-    # ── LLM 首读 vs 规则 对比核验 ────────────────────────────────────────────
-    # 无人工指定、无来源挂起时，对比 preflight sidecar 与规则结果；不一致则采用 LLM 结果并标注待确认
+    # 旧版 LLM preflight sidecar 不参与 Lite 版归档决策，避免历史模型结果污染当前规则结果。
     _pf_mismatch = False
     _pf_sidecar  = file_path.parent / f".{filename}.loci.preflight.json"
-    if not ov_target and not pending_target and not _from_title_match and _pf_sidecar.exists():
-        try:
-            _pf = json.loads(_pf_sidecar.read_text(encoding="utf-8"))
-            _pf_target = _pf.get("llm_target")
-            if _pf_target:
-                _pf_top   = _pf_target.split("/")[0]
-                _rule_top = (target_subdir or "").split("/")[0]
-                if _pf_top and _pf_top != _rule_top:
-                    logger.info(
-                        f"   ⚠ LLM首读({_pf_target}) ≠ 规则({target_subdir})"
-                        f" → 采用 LLM 结果，标注待确认"
-                    )
-                    target_subdir = _pf_target
-                    _pf_mismatch  = True
-                else:
-                    logger.info(f"   ✓ LLM首读与规则吻合（{_pf_top}）")
-        except Exception:
-            pass
 
     # ── 分层归档：把类别 target 映射成「审级/阶段 + 类别」（仅 layout: staged* 的新案件）──
     _ov_stage = override.get("stage") if isinstance(override, dict) else None
@@ -1788,6 +2158,16 @@ def process_file(
         pending_target = _apply_stage(case_cfg, pending_target, content_text, _ov_stage)
     if target_subdir != _pre:
         logger.info(f"   🧭 分层归位: {_pre} → {target_subdir}")
+
+    # Keep the document type that produced the candidate target.  This is
+    # metadata for the review UI; it must not be replaced by the holding
+    # folder name after the source gate changes the physical destination.
+    _decision_doc = ((decision_preview.get("document_type") or {}).get("selected")
+                     or {})
+    original_doc_type = (override.get("doc_type")
+                         or _decision_doc.get("name")
+                         or llm_doc_type
+                         or "")
 
     case_root = Path(case_cfg.get("cases_dir") or config["global"]["case_root"])
     case_folder = (case_root / case_name) if case_name else (case_root / "_未分类")
@@ -1808,12 +2188,24 @@ def process_file(
             qdest = qdir / f"{Path(filename).stem}_{i}{Path(filename).suffix}"
             i += 1
         shutil.move(str(file_path), str(qdest))
+        txid = _record_ledger(
+            config, file_path, qdest, action="duplicate",
+            metadata={"case_key": case_key,
+                      "decision_id": decision_preview.get("decision_id"),
+                      "duplicate_of": str(dup),
+                      **_upload_audit_fields(override)},
+        )
+        if not txid:
+            logger.error("   ❌ 事务账本写入失败，已尝试回滚重复文件移动")
+            return None
         if sidecar.exists():
             sidecar.unlink(missing_ok=True)
-        _append_archive_log(config, {"action": "duplicate", "original_name": filename,
+        _append_archive_log(config, {"action": "duplicate", "transaction_id": txid,
+                                     "original_name": filename,
                                      "from": str(file_path), "to": str(qdest),
                                      "duplicate_of": str(dup), "case": case_name or "_未分类",
-                                     "case_key": case_key, "needs_review": True})
+                                     "case_key": case_key, "needs_review": True,
+                                     **_upload_audit_fields(override)})
         logger.info(f"   ♻ → {qdest}（原件已有，移入 _重复 待你确认）")
         return str(qdest)
 
@@ -1880,6 +2272,38 @@ def process_file(
 
     dest_dir.mkdir(parents=True, exist_ok=True)
     shutil.move(str(file_path), str(dest_path))
+
+    # 跨案文件：主文件移动成功后、写入同一归档事务前建立快捷方式。
+    # 只有 os.symlink 成功创建的路径才进入事务 metadata，已有路径绝不覆盖。
+    cross_case_links = []
+    for okey in (override.get("also_cases") or []):
+        if okey == case_key:
+            continue
+        ocase = next((c for c in config.get("cases", []) if c.get("key") == okey), None)
+        if not ocase:
+            continue
+        try:
+            oroot = _associated_case_root(ocase, config) / "_跨案引用"
+            oroot.mkdir(parents=True, exist_ok=True)
+            link = oroot / dest_path.name
+            if os.path.lexists(str(link)):
+                logger.info(f"   ⏭ 跨案引用目标已存在，跳过（{okey}）：{link}")
+                continue
+            os.symlink(str(dest_path), str(link))
+            cross_case_links.append(str(link))
+            logger.info(f"   🔗 跨案引用 → {okey}/_跨案引用/{dest_path.name}")
+        except Exception as e:
+            logger.info(f"   ⚠ 跨案引用失败（{okey}）：{e}")
+
+    txid = _record_ledger(config, file_path, dest_path, action="archive",
+                          metadata={"case_key": case_key, "target": target_subdir,
+                                    "decision_id": decision_preview.get("decision_id"),
+                                    "source": source, "pending": bool(pending_target),
+                                    "links": cross_case_links,
+                                    **_upload_audit_fields(override)})
+    if not txid:
+        logger.error("   ❌ 事务账本写入失败，已尝试回滚归档移动")
+        return None
     if sidecar.exists():
         sidecar.unlink(missing_ok=True)
     if _pf_sidecar.exists():
@@ -1890,11 +2314,18 @@ def process_file(
     if pending_target:
         ps = dest_path.parent / f".{dest_path.name}.pending.json"
         ps.write_text(json.dumps({"pending_target": pending_target,
-                                  "doc_type": llm_doc_type or "", "case_key": case_key,
-                                  "case": case_name}, ensure_ascii=False), encoding="utf-8")
+                                  "case_key": case_key,
+                                  "doc_type": original_doc_type,
+                                  "original_doc_type": original_doc_type,
+                                  "source_required": True,
+                                  "source_options": list(SOURCE_OPTIONS),
+                                  "case": case_name,
+                                  **_upload_audit_fields(override)},
+                                 ensure_ascii=False), encoding="utf-8")
 
     _append_archive_log(config, {
         "original_name": original_name,
+        "transaction_id": txid,
         "from": str(file_path),
         "new_name": new_name,
         "to": str(dest_path),
@@ -1902,37 +2333,276 @@ def process_file(
         "case_key": case_key,
         "source": source,
         "target": target_subdir,
-        "manual": bool(override),
+        "rule_score": rule.get("_match_score") if rule else None,
+        "rule_reasons": rule.get("_match_reasons", []) if rule else [],
+        "manual": any(override.get(key) for key in (
+            "case_key", "target", "doc_type", "source", "party", "batch",
+            "version", "translation", "also_cases", "stage",
+        )),
         "dt_conf": dt_conf,
         "dt_src": dt_src,
         "needs_review": (case_name is None) or (dt_conf < 0.5) or bool(pending_target) or _pf_mismatch,
         "needs_source": bool(pending_target),
         "llm_rule_mismatch": _pf_mismatch,
+        **_upload_audit_fields(override),
     })
 
-    # 跨案文件：在其他关联案件里建快捷方式（symlink），指向主案的实体文件
-    for okey in (override.get("also_cases") or []):
-        if okey == case_key:
-            continue
-        ocase = next((c for c in config.get("cases", []) if c.get("key") == okey), None)
-        if not ocase:
-            continue
-        try:
-            oroot = Path(ocase.get("cases_dir") or config["global"]["case_root"]) / ocase["name"] / "_跨案引用"
-            oroot.mkdir(parents=True, exist_ok=True)
-            link = oroot / dest_path.name
-            if not link.exists():
-                os.symlink(dest_path, link)
-            logger.info(f"   🔗 跨案引用 → {okey}/_跨案引用/{dest_path.name}")
-        except Exception as e:
-            logger.info(f"   ⚠ 跨案引用失败（{okey}）：{e}")
-
     return str(dest_path)
+
+
+def process_file(
+    file_path: Path, config: dict, logger: logging.Logger, dry_run: bool = False
+) -> Optional[str]:
+    """跨进程串行处理同一收件箱文件，避免 daemon/once 重复搬运。"""
+    file_path = Path(file_path)
+    lock_key = hashlib.sha256(str(file_path.resolve(strict=False)).encode("utf-8")).hexdigest()
+    lock_path = file_path.parent / ".loci_locks" / f"{lock_key}.lock"
+    try:
+        with FileLock(lock_path, blocking=False):
+            return _process_file_unlocked(file_path, config, logger, dry_run)
+    except LockBusy:
+        logger.warning(f"   ⏳ 已由另一归档进程处理，跳过: {file_path.name}")
+        return None
+
+
+# ============================================================
+# Daemon 收件箱摄取
+# ============================================================
+_DAEMON_STABILITY_INTERVAL = 0.2
+_DAEMON_STABILITY_TIMEOUT = 10.0
+_DAEMON_MAX_ATTEMPTS = 3
+_DAEMON_MAX_STABILITY_TIMEOUT = 60.0
+_DAEMON_TEMP_SUFFIXES = {".part", ".tmp"}
+_DAEMON_SIDECAR_SUFFIXES = (".loci.json", ".pending.json")
+
+
+def _is_intake_candidate(file_path: Path) -> bool:
+    """Return whether *file_path* is a regular file eligible for daemon intake."""
+    try:
+        file_path = Path(file_path)
+        name = file_path.name
+        lower_name = name.lower()
+        if (not name or name.startswith(".")
+                or lower_name.endswith(_DAEMON_SIDECAR_SUFFIXES)
+                or file_path.suffix.lower() in _DAEMON_TEMP_SUFFIXES):
+            return False
+        return file_path.is_file()
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def _wait_for_file_stable(
+    file_path: Path,
+    *,
+    sample_interval: float = _DAEMON_STABILITY_INTERVAL,
+    timeout: float = _DAEMON_STABILITY_TIMEOUT,
+    stable_samples: int = 2,
+    clock=None,
+    sleeper=None,
+) -> bool:
+    """Wait for at least two equal size/mtime samples within a finite timeout."""
+    file_path = Path(file_path)
+    clock = clock or time.monotonic
+    sleeper = sleeper or time.sleep
+    try:
+        interval = max(0.001, float(sample_interval))
+    except (TypeError, ValueError):
+        interval = _DAEMON_STABILITY_INTERVAL
+    try:
+        wait_timeout = min(
+            max(0.0, float(timeout)), _DAEMON_MAX_STABILITY_TIMEOUT
+        )
+    except (TypeError, ValueError):
+        wait_timeout = _DAEMON_STABILITY_TIMEOUT
+    try:
+        required_samples = max(2, int(stable_samples))
+    except (TypeError, ValueError):
+        required_samples = 2
+
+    deadline = clock() + wait_timeout
+    previous = None
+    unchanged = 0
+    while True:
+        try:
+            file_stat = file_path.stat()
+        except (OSError, RuntimeError, ValueError):
+            return False
+
+        signature = (
+            file_stat.st_size,
+            getattr(file_stat, "st_mtime_ns", file_stat.st_mtime),
+        )
+        if signature == previous:
+            unchanged += 1
+        else:
+            previous = signature
+            unchanged = 1
+        if unchanged >= required_samples:
+            return True
+
+        remaining = deadline - clock()
+        if remaining <= 0:
+            return False
+        # Never sleep beyond the deadline; a zero/negative test interval still
+        # gets a small bounded yield rather than a busy infinite loop.
+        sleeper(min(interval, remaining))
+
+
+def _process_intake_file(
+    file_path: Path,
+    config: dict,
+    logger: logging.Logger,
+    *,
+    process_func=None,
+    stability_interval: float = _DAEMON_STABILITY_INTERVAL,
+    stability_timeout: float = _DAEMON_STABILITY_TIMEOUT,
+    max_attempts: int = _DAEMON_MAX_ATTEMPTS,
+) -> Optional[str]:
+    """Stabilize and process one intake file with bounded exception retries."""
+    file_path = Path(file_path)
+    if not _is_intake_candidate(file_path):
+        return None
+
+    try:
+        attempts = max(1, int(max_attempts))
+    except (TypeError, ValueError):
+        attempts = _DAEMON_MAX_ATTEMPTS
+    processor = process_func or process_file
+
+    for attempt in range(1, attempts + 1):
+        if not _is_intake_candidate(file_path):
+            return None
+        if not _wait_for_file_stable(
+            file_path,
+            sample_interval=stability_interval,
+            timeout=stability_timeout,
+        ):
+            if attempt < attempts:
+                logger.warning(
+                    "⏳ %s: 文件尚未稳定，第 %d/%d 次等待后重试",
+                    file_path.name, attempt, attempts,
+                )
+                continue
+            logger.error(
+                "❌ %s: 文件在有界等待时间内未稳定，放弃本次处理",
+                file_path.name,
+            )
+            return None
+
+        try:
+            return processor(file_path, config, logger, False)
+        except Exception as exc:
+            if attempt < attempts:
+                logger.warning(
+                    "⚠ %s: 第 %d/%d 次处理失败，将重试：%s",
+                    file_path.name, attempt, attempts, exc,
+                )
+            else:
+                logger.error(
+                    "❌ %s: 处理失败（已尝试 %d 次）：%s",
+                    file_path.name, attempts, exc,
+                )
+    return None
+
+
+def _intake_path_key(file_path: Path) -> str:
+    """Use one canonical key for event and startup-scan de-duplication."""
+    try:
+        return str(Path(file_path).resolve(strict=False))
+    except (OSError, RuntimeError, ValueError):
+        return os.path.abspath(os.fspath(file_path))
+
+
+class _DaemonIntake:
+    """Coordinate watchdog callbacks and startup scanning for one inbox."""
+
+    def __init__(
+        self,
+        config: dict,
+        logger: logging.Logger,
+        *,
+        process_func=None,
+        stability_interval: float = _DAEMON_STABILITY_INTERVAL,
+        stability_timeout: float = _DAEMON_STABILITY_TIMEOUT,
+        max_attempts: int = _DAEMON_MAX_ATTEMPTS,
+    ):
+        self.config = config
+        self.logger = logger
+        self.process_func = process_func or process_file
+        self.stability_interval = stability_interval
+        self.stability_timeout = stability_timeout
+        self.max_attempts = max_attempts
+        self.pending = set()
+        self._pending_lock = threading.Lock()
+
+    def submit(self, file_path: Path) -> bool:
+        """Claim and process a candidate, releasing the claim in all cases."""
+        file_path = Path(file_path)
+        if not _is_intake_candidate(file_path):
+            return False
+
+        key = _intake_path_key(file_path)
+        with self._pending_lock:
+            if key in self.pending:
+                return False
+            self.pending.add(key)
+        try:
+            _process_intake_file(
+                file_path,
+                self.config,
+                self.logger,
+                process_func=self.process_func,
+                stability_interval=self.stability_interval,
+                stability_timeout=self.stability_timeout,
+                max_attempts=self.max_attempts,
+            )
+            return True
+        finally:
+            with self._pending_lock:
+                self.pending.discard(key)
+
+
+def _make_daemon_event_handler(file_system_event_handler, intake: _DaemonIntake):
+    """Build a watchdog handler while keeping watchdog an optional import."""
+    class Handler(file_system_event_handler):
+        def __init__(self):
+            super().__init__()
+
+        def on_created(self, event):
+            if not getattr(event, "is_directory", False):
+                intake.submit(event.src_path)
+
+        def on_moved(self, event):
+            if not getattr(event, "is_directory", False):
+                # For moves, only the destination is an inbox candidate.
+                intake.submit(event.dest_path)
+
+    return Handler()
+
+
+def _scan_inbox(inbox: Path, intake: _DaemonIntake) -> int:
+    """Submit ordinary files already present after the observer is running."""
+    try:
+        files = sorted(
+            (path for path in Path(inbox).iterdir()
+             if _is_intake_candidate(path)),
+            key=lambda path: path.name,
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        intake.logger.error("❌ 启动扫描收件箱失败：%s", exc)
+        return 0
+
+    accepted = 0
+    for file_path in files:
+        if intake.submit(file_path):
+            accepted += 1
+    return accepted
 
 # ============================================================
 # CLI
 # ============================================================
 def main():
+    set_private_umask()
     parser = argparse.ArgumentParser(description="涉外诉讼材料自动归档 v2.2")
     parser.add_argument("-c", "--config", help="配置文件路径")
     parser.add_argument("--once", action="store_true", help="单次处理")
@@ -1950,11 +2620,28 @@ def main():
                         help="日志目录（覆盖 .env/config）")
     args = parser.parse_args()
 
+    # This gate is enforced inside the daemon executable as well as by the
+    # GUI/shell controllers.  A direct ``auto_filer.py --daemon`` invocation
+    # must never silently turn on unattended filing.
+    control_dir = Path(__file__).resolve().parent
+    if args.daemon and not unattended_filing_enabled(control_dir):
+        print(
+            "❌ 无人值守守护已锁定：请在私有 .env 中明确设置 "
+            "ALLOW_UNATTENDED_FILING=true 后再启动。",
+            file=sys.stderr,
+        )
+        return 2
+
     config_path = args.config or str(Path(__file__).parent / "config.yaml")
     if not Path(config_path).exists():
         config_path = str(Path(__file__).parent.parent / "auto_filer" / "config.yaml")
     with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
+    # Compatibility adapter: canonical matter records are authoritative for
+    # archive dimensions while legacy rule fields remain available to the
+    # existing engine during migration.
+    config = config or {}
+    config["cases"] = [runtime_case_view(case) for case in config.get("cases", [])]
 
     # 第一层：.env 覆盖
     for k_env, k_cfg in [
@@ -1988,7 +2675,12 @@ def main():
 
     # 日志配置
     log_dir = Path(config["global"]["log_dir"])
-    log_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logging.getLogger("auto_filer").error(
+            "日志目录无法创建，安全停止：%s（%s）", log_dir, type(exc).__name__)
+        raise
     logger = logging.getLogger("auto_filer")
     logger.setLevel(logging.DEBUG if args.verbose else logging.INFO)
     fh = logging.FileHandler(log_dir / f"filer_{datetime.now().strftime('%Y%m')}.log", encoding="utf-8")
@@ -2000,6 +2692,12 @@ def main():
     logger.handlers.clear()
     logger.addHandler(fh)
     logger.addHandler(ch)
+    tighten_private_permissions(
+        env_path=Path(__file__).parent.parent / ".env",
+        config_path=Path(config_path),
+        logs_dir=log_dir,
+        logger=logger,
+    )
 
     inbox = Path(config["global"]["inbox_dir"])
 
@@ -2039,36 +2737,77 @@ def main():
         logger.info("=" * 50 + f"\n📊 {ok} 成功 / {skip} 跳过 / {len(files)} 总计")
 
     elif args.daemon:
-        try:
-            from watchdog.observers import Observer
-            from watchdog.events import FileSystemEventHandler
-        except ImportError:
-            logger.error("❌ watchdog 未安装: pip3 install watchdog")
-            sys.exit(1)
+        instance = None
+        obs = None
+        stop_event = threading.Event()
 
-        class H(FileSystemEventHandler):
-            def __init__(s):
-                s.pending = set()
-            def on_created(s, e):
-                if not e.is_directory:
-                    time.sleep(0.5)
-                    p = Path(e.src_path)
-                    if p.exists() and str(p) not in s.pending:
-                        s.pending.add(str(p))
-                        try: process_file(p, config, logger, False)
-                        except Exception as ex: logger.error(f"❌ {p.name}: {ex}")
-
-        inbox.mkdir(parents=True, exist_ok=True)
-        logger.info(f"👀 监听收件箱: {inbox}\n   Ctrl+C 停止\n")
-        obs = Observer()
-        obs.schedule(H(), str(inbox), recursive=False)
-        obs.start()
         try:
-            while True: time.sleep(1)
+            try:
+                # The daemon owns the lifetime lock and publishes a verifiable
+                # starting record before any slow optional startup work.  This
+                # makes cross-process stop safe even while readiness is pending.
+                instance = acquire_daemon_instance(control_dir, command=sys.argv)
+                if instance.should_stop_requested():
+                    # Do not return from the daemon branch here.  Keep the
+                    # cleanup ownership in the surrounding finally block so
+                    # the instance lock and state files are always released.
+                    stop_event.set()
+            except DaemonAlreadyRunning as exc:
+                logger.error("❌ %s", exc)
+                return 2
+
+            # A stop marker can race with instance acquisition.  Keep this
+            # fast path inside the same try/finally instead of returning from
+            # the daemon branch before the common cleanup below.
+            if not stop_event.is_set():
+                def _request_stop(_signum, _frame):
+                    stop_event.set()
+
+                signal.signal(signal.SIGTERM, _request_stop)
+                signal.signal(signal.SIGINT, _request_stop)
+
+                try:
+                    from watchdog.observers import Observer
+                    from watchdog.events import FileSystemEventHandler
+                except ImportError:
+                    logger.error("❌ watchdog 未安装: pip3 install watchdog")
+                    return 1
+
+                inbox.mkdir(parents=True, exist_ok=True)
+                logger.info(f"👀 监听收件箱: {inbox}\n   Ctrl+C 停止\n")
+                intake = _DaemonIntake(config, logger)
+                obs = Observer()
+                obs.schedule(
+                    _make_daemon_event_handler(FileSystemEventHandler, intake),
+                    str(inbox),
+                    recursive=False,
+                )
+                # Publish readiness only after the watchdog observer is running.
+                obs.start()
+                instance.publish_ready(sys.argv)
+                # Files copied before daemon startup do not emit a new event;
+                # scan only after the observer is live so the shared pending
+                # set closes the scan/watchdog race.
+                _scan_inbox(inbox, intake)
+                while not stop_event.wait(1.0):
+                    if instance.should_stop_requested():
+                        break
         except KeyboardInterrupt:
-            obs.stop()
             logger.info("\n🛑 已停止")
-        obs.join()
+        except Exception as exc:
+            logger.error("❌ 守护进程启动失败：%s: %s", type(exc).__name__, exc)
+            return 1
+        finally:
+            try:
+                if obs is not None:
+                    obs.stop()
+                    obs.join()
+            finally:
+                if instance is not None:
+                    instance.close()
+        logger.info("\n🛑 已停止")
+
+    return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main() or 0)

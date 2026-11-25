@@ -78,12 +78,18 @@ class PaddleOCREngine:
 
 
 def make_ocr(name=None):
-    """OCR 引擎工厂。name 取 'rapid'|'paddle'；默认 paddle（精度更高，中英混排扫描件更稳），
-    可用环境变量 DESENSITIZE_OCR=rapid 全局切回轻量版。Paddle 不可用时自动回退 Rapid，
-    保证 OCR 永不整体失效。归类/脱敏/问答共用此工厂，统一走同一 OCR。"""
-    name = (name or os.environ.get("DESENSITIZE_OCR", "paddle")).lower()
+    """OCR 引擎工厂。
+
+    默认使用轻量、纯本地的 RapidOCR；需要更高精度时可设置
+    ``DESENSITIZE_OCR=paddle``。RapidOCR 不可用时回退 Paddle，反之亦然，
+    避免 PDF 因单一 OCR 引擎缺失而完全无法读取。
+    """
+    name = (name or os.environ.get("DESENSITIZE_OCR", "rapid")).lower()
     if name == "rapid":
-        return RapidOCREngine()
+        try:
+            return RapidOCREngine()
+        except Exception:
+            return PaddleOCREngine()
     try:
         return PaddleOCREngine()
     except Exception:

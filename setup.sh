@@ -1,244 +1,255 @@
 #!/bin/bash
 # ============================================================
-# 涉外诉讼案件工作区 一键部署脚本
+# Loci RC 最小安全安装
 # 用法: bash setup.sh
 # ============================================================
-set -e
+set -euo pipefail
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
-OK="${GREEN}✅${NC}"; WARN="${YELLOW}⚠${NC}"; ERR="${RED}❌${NC}"
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 WS_DIR="$SCRIPT_DIR"
+ENV_FILE="$WS_DIR/.env"
+CONFIG_FILE="$WS_DIR/auto_filer/config.yaml"
+ABS_WS_DIR="$WS_DIR"
 
 echo "================================================"
-echo "  涉外诉讼案件工作区 - 一键部署"
+echo "  Loci RC - 最小安全安装"
 echo "================================================"
-echo ""
 
-# ── 1. 检测系统 ──
-echo "🔍 系统检测..."
-OS="unknown"
-case "$(uname -s)" in
-  Darwin) OS="macOS" ;;
-  Linux)  OS="Linux" ;;
-esac
-echo "   操作系统: $OS"
-echo ""
-
-# ── 2. 创建 .env ──
-if [ ! -f "$WS_DIR/.env" ]; then
-  echo "📝 创建配置文件 .env..."
-  cp "$WS_DIR/.env.example" "$WS_DIR/.env"
-
-  # 替换为绝对路径
-  ABS_WS_DIR="$(cd "$WS_DIR" && pwd)"
-  if [ "$OS" = "macOS" ]; then
-    sed -i '' "s|__WORKSPACE_ROOT__|$ABS_WS_DIR|g" "$WS_DIR/.env"
-  else
-    sed -i "s|__WORKSPACE_ROOT__|$ABS_WS_DIR|g" "$WS_DIR/.env"
+reject_symlink() {
+  local path="$1"
+  local label="$2"
+  if [ -L "$path" ]; then
+    echo "❌ 配置路径安全检查失败：$label 是符号链接，拒绝继续：$path" >&2
+    echo "   请将其替换为预期位置中的普通文件或目录后重试。" >&2
+    exit 1
   fi
+}
 
-  echo "$OK .env 已创建，默认工作区: ${GREEN}$ABS_WS_DIR${NC}"
-  echo "   如需修改路径或名称，编辑 .env 文件"
+assert_workspace_path_safe() {
+  local path="$1"
+  local label="$2"
+  local current="$path"
+  # Check every path component inside the workspace.  A symlink in a parent
+  # directory is just as dangerous as a symlink at the final file path.
+  while [ "$current" != "$WS_DIR" ] && [ "$current" != "/" ]; do
+    reject_symlink "$current" "$label"
+    current="$(dirname "$current")"
+  done
+  reject_symlink "$WS_DIR" "工作区目录"
+}
+
+assert_control_plane_paths_safe() {
+  # SCRIPT_DIR is already physical (pwd -P), but keep the check explicit so
+  # this boundary remains clear if path construction changes later.
+  reject_symlink "$WS_DIR" "工作区目录"
+  reject_symlink "$ENV_FILE" ".env"
+  reject_symlink "$CONFIG_FILE" "auto_filer/config.yaml"
+  reject_symlink "$WS_DIR/auto_filer" "auto_filer 配置目录"
+  reject_symlink "$WS_DIR/.env.example" ".env.example"
+  reject_symlink "$WS_DIR/auto_filer/config.example.yaml" \
+    "auto_filer/config.example.yaml"
+  assert_workspace_path_safe "$WS_DIR/requirements.txt" "requirements.txt 路径"
+  assert_workspace_path_safe "$WS_DIR/.venv" ".venv 路径"
+  assert_workspace_path_safe "$WS_DIR/.venv/bin" ".venv/bin 路径"
+  assert_workspace_path_safe "$WS_DIR/bin" "bin 路径"
+  assert_workspace_path_safe "$WS_DIR/bin/filer.sh" "bin/filer.sh 路径"
+  assert_workspace_path_safe "$WS_DIR/launch.command" "launch.command 路径"
+}
+
+require_regular_config_file() {
+  local path="$1"
+  local label="$2"
+  assert_control_plane_paths_safe
+  if [ ! -f "$path" ]; then
+    echo "❌ 配置文件安全检查失败：$label 不是普通文件或不存在：$path" >&2
+    exit 1
+  fi
+}
+
+replace_placeholder() {
+  local file="$1"
+  local expression="$2"
+  assert_control_plane_paths_safe
+  require_regular_config_file "$file" "配置文件"
+  if [ "$(uname -s)" = "Darwin" ]; then
+    sed -i '' "$expression" "$file"
+  else
+    sed -i "$expression" "$file"
+  fi
+}
+
+trim_whitespace() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+# Read one KEY=value entry without evaluating the value.  In particular, a
+# value such as "$(touch /tmp/marker)" remains data and is never executed.
+read_env_value() {
+  local wanted="$1"
+  local line key_name raw=""
+  require_regular_config_file "$ENV_FILE" ".env"
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="$(trim_whitespace "$line")"
+    case "$line" in
+      ""|\#*)
+        continue
+        ;;
+      export[[:space:]]*)
+        line="${line#export}"
+        line="$(trim_whitespace "$line")"
+        ;;
+    esac
+    case "$line" in
+      *=*)
+        key_name="$(trim_whitespace "${line%%=*}")"
+        [ "$key_name" = "$wanted" ] || continue
+        raw="$(trim_whitespace "${line#*=}")"
+        ;;
+      *)
+        continue
+        ;;
+    esac
+
+    if [ "${#raw}" -ge 2 ]; then
+      case "$raw" in
+        \"*\") raw="${raw:1:${#raw}-2}" ;;
+        \'*\') raw="${raw:1:${#raw}-2}" ;;
+      esac
+    fi
+    printf '%s\n' "$raw"
+    return 0
+  done < "$ENV_FILE"
+  return 0
+}
+
+expand_workspace_refs() {
+  local value="$1"
+  local workspace_root="$2"
+  value="${value//\$\{WORKSPACE\}/$ABS_WS_DIR}"
+  value="${value//\$WORKSPACE/$ABS_WS_DIR}"
+  value="${value//\$\{CASE_WORKSPACE_ROOT\}/$workspace_root}"
+  value="${value//\$CASE_WORKSPACE_ROOT/$workspace_root}"
+  printf '%s\n' "$value"
+}
+
+escaped_workspace="$(printf '%s' "$ABS_WS_DIR" | sed 's/[\\&|]/\\&/g')"
+
+assert_control_plane_paths_safe
+
+if [ ! -e "$ENV_FILE" ] && [ ! -L "$ENV_FILE" ]; then
+  assert_control_plane_paths_safe
+  cp "$WS_DIR/.env.example" "$ENV_FILE"
+  replace_placeholder "$ENV_FILE" "s|__WORKSPACE_ROOT__|$escaped_workspace|g"
+  echo "✅ 已创建 .env"
 else
-  echo "$OK .env 已存在，跳过"
+  require_regular_config_file "$ENV_FILE" ".env"
+  echo "✅ .env 已存在，跳过覆盖"
 fi
-echo ""
 
-# ── 3. 加载配置 ──
-source "$WS_DIR/.env"
+if [ ! -e "$CONFIG_FILE" ] && [ ! -L "$CONFIG_FILE" ]; then
+  assert_control_plane_paths_safe
+  cp "$WS_DIR/auto_filer/config.example.yaml" "$CONFIG_FILE"
+  replace_placeholder "$CONFIG_FILE" "s|\${WORKSPACE}|$escaped_workspace|g"
+  echo "✅ 已创建 auto_filer/config.yaml"
+else
+  require_regular_config_file "$CONFIG_FILE" "auto_filer/config.yaml"
+  echo "✅ auto_filer/config.yaml 已存在，跳过覆盖"
+fi
 
-# ── 4. 创建目录结构 ──
-echo "📁 创建目录结构..."
-mkdir -p "$INBOX_DIR"
-mkdir -p "$CASES_DIR"
-mkdir -p "$LOG_DIR"
-mkdir -p "$CASES_DIR/_未分类/_待分类"
-echo "$OK 收件箱: $INBOX_DIR"
-echo "$OK 案件目录: $CASES_DIR"
-echo "$OK 日志目录: $LOG_DIR"
-
-# 收件箱 README
-cat > "$INBOX_DIR/README.txt" << 'INBOX_README'
-═══════════════════════════════════════
-  材料归档收件箱
-═══════════════════════════════════════
-
-把需要归档的案卷材料拖到这个文件夹，
-系统会自动：
-  1. 识别所属案件
-  2. 归类到对应子目录
-  3. 重命名为标准格式
-
-支持文件类型:
-  • Word 文档 (.docx) — 读文字内容
-  • PDF (文字型 + 扫描版) — pdftotext + OCR
-  • 图片 (.jpg .png .tiff) — OCR 识别
-  • Excel (.xlsx) — 读单元格文字
-  • 纯文本 (.txt .md) — 读文件内容
-
-提示:
-  • 文件命名尽量含中文关键词更容易匹配
-  • 照片/扫描件会自动 OCR，无需手动命名
-  • 文件移动后收件箱会变空，不用手动清理
-  • 归到 _未分类 或 _待分类 的文件需手动归位
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-INBOX_README
-
-echo "$OK 收件箱说明文件已创建"
-echo ""
-
-# ── 5. Python 依赖 ──
-echo "🐍 检查 Python 依赖..."
-PYTHON=""
-for py in python3.11 python3.10 python3; do
-  if command -v "$py" &>/dev/null; then
-    PYTHON="$py"
+PYTHON_BIN=""
+for candidate in "${PYTHON_BIN_OVERRIDE:-}" python3.11 python3.10 python3.9 python3; do
+  if [ -n "$candidate" ] && command -v "$candidate" >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v "$candidate")"
     break
   fi
 done
-if [ -z "$PYTHON" ]; then
-  echo "$ERR Python3 未安装，请先安装: brew install python"
+if [ -z "$PYTHON_BIN" ]; then
+  echo "❌ 未找到 Python 3，请先安装 Python 3。" >&2
   exit 1
 fi
-echo "   Python: $PYTHON ($($PYTHON --version))"
 
-_missing_pip() {
-  ! $PYTHON -c "import $1" 2>/dev/null
-}
-
-NEED_INSTALL=""
-for mod in yaml watchdog docx openpyxl pytesseract Pillow; do
-  if _missing_pip "$mod"; then
-    NEED_INSTALL="$NEED_INSTALL $mod"
-  fi
-done
-
-if [ -n "$NEED_INSTALL" ]; then
-  echo "   安装缺失的 Python 包:$NEED_INSTALL"
-  $PYTHON -m pip install --break-system-packages -q $NEED_INSTALL 2>&1 | tail -1
-fi
-echo "$OK Python 依赖就绪"
-echo ""
-
-# ── 6. 系统依赖 (brew/macOS) ──
-echo "🔧 系统依赖检测..."
-MISSING_SYS=""
-
-check_cmd() {
-  if ! command -v "$1" &>/dev/null; then
-    MISSING_SYS="$MISSING_SYS $2"
-    echo "   ${WARN} 缺少: $2 ($1)"
-  fi
-}
-
-check_cmd tesseract "tesseract"
-check_cmd pdftotext "poppler"
-
-if [ -n "$MISSING_SYS" ]; then
-  echo ""
-  if [ "$OS" = "macOS" ]; then
-    if command -v brew &>/dev/null; then
-      echo "   运行: brew install$MISSING_SYS"
-      read -p "   是否自动安装? (y/n) " -n 1 -r
-      echo
-      if [[ $REPLY =~ ^[Yy]$ ]]; then
-        brew install$MISSING_SYS
-        echo "$OK 系统依赖安装完成"
-      fi
-    else
-      echo "   ${WARN} Homebrew 未安装，请手动安装:"
-      echo "   brew install$MISSING_SYS"
-    fi
-  elif [ "$OS" = "Linux" ]; then
-    echo "   运行: sudo apt-get install -y$MISSING_SYS"
+VENV_DIR="$WS_DIR/.venv"
+VENV_PYTHON="$VENV_DIR/bin/python"
+if [ ! -x "$VENV_PYTHON" ]; then
+  echo "🐍 使用 $PYTHON_BIN 创建项目虚拟环境..."
+  if ! "$PYTHON_BIN" -m venv "$VENV_DIR"; then
+    echo "❌ 无法创建 $VENV_DIR，请确认 bootstrap Python 已安装 venv/ensurepip。" >&2
+    echo "   可尝试: $PYTHON_BIN -m ensurepip --upgrade" >&2
+    exit 1
   fi
 else
-  echo "$OK 系统依赖就绪 (tesseract + poppler)"
+  echo "✅ 项目虚拟环境已存在，复用 $VENV_DIR"
 fi
 
-# tesseract 中文包
-if command -v tesseract &>/dev/null; then
-  if ! tesseract --list-langs 2>/dev/null | grep -q chi_sim; then
-    echo "   ${WARN} tesseract 缺少中文语言包"
-    if [ "$OS" = "macOS" ] && command -v brew &>/dev/null; then
-      brew install tesseract-lang 2>/dev/null || true
-    fi
-  else
-    echo "$OK tesseract 中文包就绪 (chi_sim+eng)"
-  fi
+assert_workspace_path_safe "$VENV_DIR" ".venv 路径"
+assert_workspace_path_safe "$VENV_DIR/bin" ".venv/bin 路径"
+
+if [ ! -x "$VENV_PYTHON" ]; then
+  echo "❌ 项目虚拟环境解释器缺失: $VENV_PYTHON" >&2
+  echo "   请删除不完整的 .venv 后重新运行: bash \"$WS_DIR/setup.sh\"" >&2
+  exit 1
 fi
-echo ""
 
-# ── 7. 可执行权限 ──
-chmod +x "$WS_DIR/bin/new_case.sh" 2>/dev/null || true
-chmod +x "$WS_DIR/bin/filer.sh" 2>/dev/null || true
-echo "$OK 脚本权限设置完成"
-echo ""
+case_workspace_root="$(read_env_value CASE_WORKSPACE_ROOT)"
+case_workspace_root="$(expand_workspace_refs "$case_workspace_root" "$ABS_WS_DIR")"
+[ -n "$case_workspace_root" ] || case_workspace_root="$ABS_WS_DIR"
 
-# ── 8. launchd (仅 macOS) ──
-if [ "$OS" = "macOS" ]; then
-  echo "🍎 macOS launchd 配置..."
-  PLIST_SRC="$WS_DIR/config/com.zl.autofiler.plist"
-  PLIST_DST="$HOME/Library/LaunchAgents/com.zl.autofiler.plist"
+inbox_dir="$(read_env_value INBOX_DIR)"
+inbox_dir="$(expand_workspace_refs "$inbox_dir" "$case_workspace_root")"
+[ -n "$inbox_dir" ] || inbox_dir="$case_workspace_root/inbox"
 
-  # 替换路径占位符
-  PYTHON_PATH=$(which "$PYTHON")
-  sed \
-    -e "s|__PYTHON_PATH__|$PYTHON_PATH|g" \
-    -e "s|__AF_DIR__|$WS_DIR/auto_filer|g" \
-    -e "s|__LOG_DIR__|$LOG_DIR|g" \
-    "$PLIST_SRC" > "$PLIST_DST"
+cases_dir="$(read_env_value CASES_DIR)"
+cases_dir="$(expand_workspace_refs "$cases_dir" "$case_workspace_root")"
+[ -n "$cases_dir" ] || cases_dir="$case_workspace_root/cases"
 
-  echo "$OK launchd plist 已安装: $PLIST_DST"
-  echo ""
-  echo "   开机自启: launchctl load $PLIST_DST"
-  echo "   手动启动: launchctl start com.zl.autofiler"
-  echo "   停止服务: launchctl stop com.zl.autofiler"
-  echo "   卸载服务: launchctl unload $PLIST_DST"
+log_dir="$(read_env_value LOG_DIR)"
+log_dir="$(expand_workspace_refs "$log_dir" "$case_workspace_root")"
+[ -n "$log_dir" ] || log_dir="$case_workspace_root/logs"
+
+reject_symlink "$inbox_dir" "INBOX_DIR 目标目录"
+reject_symlink "$cases_dir" "CASES_DIR 目标目录"
+reject_symlink "$log_dir" "LOG_DIR 目标目录"
+
+echo "📁 创建 Loci 工作区目录..."
+mkdir -p "$inbox_dir" "$cases_dir" "$log_dir"
+mkdir -p "$cases_dir/_未分类/_待分类"
+reject_symlink "$inbox_dir" "INBOX_DIR 目标目录"
+reject_symlink "$cases_dir" "CASES_DIR 目标目录"
+reject_symlink "$log_dir" "LOG_DIR 目标目录"
+assert_control_plane_paths_safe
+require_regular_config_file "$ENV_FILE" ".env"
+require_regular_config_file "$CONFIG_FILE" "auto_filer/config.yaml"
+chmod 700 "$inbox_dir" "$cases_dir" "$log_dir"
+chmod 600 "$ENV_FILE" "$CONFIG_FILE"
+echo "✅ 收件箱: $inbox_dir"
+echo "✅ 案件目录: $cases_dir"
+echo "✅ 日志目录: $log_dir"
+
+assert_workspace_path_safe "$WS_DIR/requirements.txt" "requirements.txt 路径"
+if [ ! -f "$WS_DIR/requirements.txt" ]; then
+  echo "❌ 根 requirements 不存在或不是普通文件：$WS_DIR/requirements.txt" >&2
+  exit 1
 fi
-echo ""
+echo "🐍 使用 $VENV_PYTHON 安装根 requirements..."
+"$VENV_PYTHON" -m pip install -r "$WS_DIR/requirements.txt"
 
-# ── 9. 快速启动脚本 ──
-if [ ! -f "$WS_DIR/quick_start.sh" ]; then
-  cat > "$WS_DIR/quick_start.sh" << 'QUICKSTART'
-#!/bin/bash
-# 快速启动 - 双击运行或拖到终端
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-bash "$SCRIPT_DIR/bin/filer.sh" start
-echo "收件箱路径:"
-grep INBOX_DIR "$SCRIPT_DIR/.env" 2>/dev/null || echo "$SCRIPT_DIR/inbox"
-QUICKSTART
-  chmod +x "$WS_DIR/quick_start.sh"
-fi
-echo "$OK 快速启动脚本: quick_start.sh"
-echo ""
+assert_workspace_path_safe "$WS_DIR/bin/filer.sh" "bin/filer.sh 路径"
+assert_workspace_path_safe "$WS_DIR/launch.command" "launch.command 路径"
+chmod +x "$WS_DIR/bin/filer.sh" "$WS_DIR/launch.command" 2>/dev/null || true
 
-# ── 10. 完成 ──
-echo "================================================"
-echo "  ${GREEN}部署完成！${NC}"
-echo "================================================"
 echo ""
-echo "📋 常用命令:"
-echo "   bash bin/new_case.sh \"2026-客户-案由\"   新建案件"
-echo "   bash bin/filer.sh start                  启动归档守护"
-echo "   bash bin/filer.sh once                   单次归档 inbox 文件"
-echo "   bash bin/filer.sh dry-run                试运行(看归到哪)"
-echo "   bash bin/filer.sh status                 查看状态"
-echo "   bash bin/filer.sh log                    查看日志"
+echo "✅ Loci RC 安装完成。"
 echo ""
-echo "📂 收件箱路径: $INBOX_DIR"
-echo "   把文件丢进去就行。支持 docx/PDF/图片(OCR)/Excel"
+echo "启动 Loci 前台："
+echo "  cd \"$WS_DIR\""
+echo "  ./launch.command"
+echo "  $VENV_PYTHON loci/run.py"
+echo "  bash bin/filer.sh loci"
 echo ""
-echo "⚙  配置文件:"
-echo "   .env                   工作区配置"
-echo "   auto_filer/config.yaml 案件+规则(添加新案件改这里)"
-echo ""
-echo "💡 首次使用建议:"
-echo "   1. 编辑 auto_filer/config.yaml，补全你的案件列表"
-echo "   2. bash bin/new_case.sh \"案件名\" 创建案件文件夹"
-echo "   3. 丢几个文件到 inbox，跑 bash bin/filer.sh dry-run 试试"
-echo "   4. 确认无误后，bash bin/filer.sh start 启用守护"
+echo "安全默认：归档建议模式、人工确认；无人值守守护默认锁定。"
+echo "如完成充分验收并明确承担风险，再在私有 .env 中设置："
+echo "  ALLOW_UNATTENDED_FILING=true"
 echo ""

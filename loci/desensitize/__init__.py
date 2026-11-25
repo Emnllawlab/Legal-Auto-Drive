@@ -12,7 +12,8 @@ from .pseudonymize import (
     Registry, pseudonymize, render, restore, build_restore_map,
     vault_save, vault_load,
 )
-from .pipeline import desensitize_text, analyze_text, apply_review, desensitize_md_file
+from .pipeline import (desensitize_text, analyze_text, apply_review,
+                       desensitize_md_file, resolve_categories, REDACTION_POLICIES)
 from .to_markdown import to_markdown
 from .ner import QwenNER, health_check
 from .pseudonymize import plan
@@ -27,6 +28,7 @@ __all__ = [
     "Span", "canon", "extract", "extract_en", "merge_spans",
     "Registry", "pseudonymize", "render", "plan", "restore", "build_restore_map",
     "vault_save", "vault_load", "desensitize_text", "analyze_text", "apply_review",
+    "resolve_categories", "REDACTION_POLICIES",
     "QwenNER", "health_check",
     "desensitize_docx", "desensitize_pdf", "desensitize_image",
     "RapidOCREngine", "PaddleOCREngine", "make_ocr", "detect_seals",

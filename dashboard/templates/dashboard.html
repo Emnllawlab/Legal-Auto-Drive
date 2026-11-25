@@ -2514,7 +2514,7 @@ async function directImportAutoClassify(files) {
   if (!n) { showToast("error", "导入失败", d.error || "未上传任何文件"); return; }
   await loadInbox();
   showToast("info", "已导入收件箱", `${n} 个文件 → 开始自动归类…`);
-  triggerScan();                 // 立即跑自动归档（含 LLM 识别 + 分层归位）
+  triggerScan();                 // 立即跑自动归档（本地文本提取 + 规则归位）
 }
 
 async function uploadFiles(files) {
@@ -2809,7 +2809,7 @@ async function confirmClassify() {
         })
       ));
     } else {
-      // 智能识别 → 批量触发 LLM
+      // 智能识别 → 批量触发本地规则预判
       remaining.forEach(fn => {
         fetch("/api/preflight/trigger/" + encodeURIComponent(fn), {method:"POST"}).catch(() => {});
       });
@@ -2829,7 +2829,7 @@ async function skipClassify() {
   const sameAll = document.getElementById("cl-same-all")?.checked;
 
   if (sameAll) {
-    // 触发当前及所有剩余文件的 LLM 首读，立即关闭弹窗
+    // 触发当前及所有剩余文件的本地规则首读，立即关闭弹窗
     const targets = _clFiles.slice(_clIndex);
     targets.forEach(fn => {
       fetch("/api/preflight/trigger/" + encodeURIComponent(fn), {method: "POST"}).catch(() => {});
@@ -2838,14 +2838,14 @@ async function skipClassify() {
     document.getElementById("modal-classify").classList.remove("open");
     _clSetProgress(_clFiles.length, _clFiles.length);
   } else {
-    // 仅触发当前文件的 LLM 首读，进入下一个
+    // 仅触发当前文件的本地规则首读，进入下一个
     fetch("/api/preflight/trigger/" + encodeURIComponent(_clFiles[_clIndex]), {method: "POST"}).catch(() => {});
     _clIndex++;
     _clOpenModal(_clIndex);
   }
 }
 
-// ── LLM Preflight 轮询 ───────────────────────────────────────────────────
+// ── 本地规则预判轮询 ───────────────────────────────────────────────────
 let _clPreflightTimer = null;
 
 function _clPreflight_stop() {
@@ -2877,9 +2877,9 @@ function _setLlmStatus(state, msg) {
   const sum = document.getElementById("cl-llm-summary");
   if (!el) return;
   const cfg = {
-    loading: ["⟳ Qwen 解读中...", "var(--t3)", ""],
-    done:    ["✓ 已解读",          "var(--success)", msg || ""],
-    failed:  ["— 无法解读",        "var(--t3)", msg || ""],
+    loading: ["⟳ 本地规则识别中...", "var(--t3)", ""],
+    done:    ["✓ 已完成规则预判",    "var(--success)", msg || ""],
+    failed:  ["— 无法完成预判",      "var(--t3)", msg || ""],
   }[state] || ["", "var(--t3)", ""];
   el.textContent  = cfg[0];
   el.style.color  = cfg[1];
@@ -2896,7 +2896,7 @@ function _clApplyPreflight(r) {
     if (btn) btn.classList.add("active");
   }
 
-  // 文件夹大类 + 文件类型（依赖 llm_target；前缀无关匹配，兼容层级序号）
+  // 文件夹大类 + 文件类型（兼容字段 llm_target；前缀无关匹配，兼容层级序号）
   const tgt = r.llm_target || "";
   if (tgt) {
     const _core = s => (s || "").replace(/^(?:\d{2}_|[A-Z]{1,2} - |\d+\. )/, "");
@@ -3973,7 +3973,7 @@ function _revLang() { return document.querySelector("[data-group='rev-lang'].sel
 
 async function reviewAnalyze() {
   const hint = document.getElementById("review-analyze-hint");
-  hint.textContent = "分析中…（首次连 Qwen 可能稍慢）";
+  hint.textContent = "分析中…（本地规则脱敏）";
   try {
     const r = await fetch("/api/desensitize-analyze", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -3985,7 +3985,7 @@ async function reviewAnalyze() {
     _revSpans = (d.spans || []).map(s => ({ ...s, on: true }));
     const lowN = _revSpans.filter(s => s.low_conf).length;
     hint.textContent = `识别 ${_revSpans.length} 处` +
-      (lowN ? `（其中 ${lowN} 处待确认）` : "") + (d.ner ? "" : "（仅正则，未连 Qwen）");
+      (lowN ? `（其中 ${lowN} 处待确认）` : "") + (d.ner ? "" : "（仅本地规则）");
     _renderRevEntities();
     document.getElementById("review-export-btn").disabled = false;
     reviewPreview();                       // 识别后立即出右侧预览，左右所见即所得
@@ -4008,7 +4008,7 @@ function _renderRevEntities() {
       const g = _revGroups[gi];
       const on = g.idxs.every(i => _revSpans[i].on);
       const low = g.idxs.some(i => _revSpans[i].low_conf);
-      const lowTag = low ? `<span title="模型语义命中且置信度偏低，请人工确认" style="color:#c07a00;background:#fff3bf;border-radius:8px;padding:0 5px;font-size:10px;font-weight:600;">待确认</span>` : "";
+      const lowTag = low ? `<span title="规则命中置信度偏低，请人工确认" style="color:#c07a00;background:#fff3bf;border-radius:8px;padding:0 5px;font-size:10px;font-weight:600;">待确认</span>` : "";
       html += `<div style="display:flex;gap:6px;align-items:center;padding:2px 0;font-size:13px;">
         <input type="checkbox" ${on ? "checked" : ""} onchange="_revToggleGroup(${gi},this.checked)" style="accent-color:var(--brand-h);cursor:pointer;">
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${low ? "color:#8a5a00;" : ""}" title="${esc(g.text)}">${esc(g.text)}</span>
@@ -4370,7 +4370,7 @@ function _dpEnter(path, name) {
   document.getElementById("dp-export-btn").disabled = true;
   document.querySelectorAll("[data-group='dp-mode']").forEach(b => b.classList.toggle("selected", b.dataset.val === "alias"));
   document.getElementById("dp-mode-tag").textContent = "化名";
-  document.getElementById("dp-hint").textContent = "点「① 识别」开始（含 OCR/模型，稍候）";
+  document.getElementById("dp-hint").textContent = "点「① 识别」开始（含 OCR/本地规则，稍候）";
   _dpShowReview();
   // 不自动识别：OCR/NER 较重，避免浏览文件时逐个触发；由用户点「① 识别」
 }
@@ -4378,7 +4378,7 @@ function _dpEnter(path, name) {
 async function dpAnalyze() {
   if (!_dpPath) return;
   const hint = document.getElementById("dp-hint");
-  hint.textContent = "识别中…（首次连模型 / OCR 可能稍慢）";
+  hint.textContent = "识别中…（OCR / 本地规则可能稍慢）";
   document.getElementById("dp-entities").innerHTML = '<div style="color:var(--t3);font-size:12px;">识别中…</div>';
   try {
     const r = await fetch("/api/desensitize-analyze", {
@@ -4395,7 +4395,7 @@ async function dpAnalyze() {
     _dpText = d.text;
     _dpSpans = (d.spans || []).map(s => ({ ...s, on: true }));
     const lowN = _dpSpans.filter(s => s.low_conf).length;
-    hint.textContent = `识别 ${_dpSpans.length} 处` + (lowN ? `（其中 ${lowN} 处待确认）` : "") + (d.ner ? "" : "（仅正则，未连 Qwen）");
+    hint.textContent = `识别 ${_dpSpans.length} 处` + (lowN ? `（其中 ${lowN} 处待确认）` : "") + (d.ner ? "" : "（仅本地规则）");
     _dpRenderEntities();
     document.getElementById("dp-export-btn").disabled = false;
     dpPreview();
@@ -4418,7 +4418,7 @@ function _dpRenderEntities() {
       const g = _dpGroups[gi];
       const on = g.idxs.every(i => _dpSpans[i].on);
       const low = g.idxs.some(i => _dpSpans[i].low_conf);
-      const lowTag = low ? `<span class="dp-low-tag" title="模型语义命中且置信度偏低，请人工确认">待确认</span>` : "";
+      const lowTag = low ? `<span class="dp-low-tag" title="规则命中置信度偏低，请人工确认">待确认</span>` : "";
       html += `<div class="dp-ent-row">
         <input type="checkbox" ${on ? "checked" : ""} onchange="_dpToggleGroup(${gi},this.checked)" style="accent-color:#7c3aed;cursor:pointer;">
         <span class="dp-ent-name" title="${esc(g.text)}"${low ? ' style="color:#8a5a00;"' : ''}>${esc(g.text)}</span>
@@ -4522,7 +4522,7 @@ async function suggestFolder() {
     _suggestResult = d;
     const opts = (d.catalog || []).map(c =>
       `<option value="${esc(c)}"${c === d.target ? " selected" : ""}>${esc(c)}</option>`).join("");
-    const conf = d.target ? `（置信度 ${d.confidence}）` : "（模型未给出建议，请手动选）";
+    const conf = d.target ? `（置信度 ${d.confidence}）` : "（暂无规则建议，请手动选）";
     const cur = `当前位置：${esc(d.current || "案件根目录")}`;
     bar.innerHTML = `
       <div style="margin-bottom:6px;">${cur} · 识别为「<strong>${esc(d.doc_type || "未知")}</strong>」，建议归入 ${conf}</div>

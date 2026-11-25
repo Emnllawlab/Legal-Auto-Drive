@@ -19,6 +19,7 @@ class Span:
     text: str
     source: str = "regex"  # "regex" | "ner"
     score: float = 1.0     # NER 置信度；regex 命中传 1.0
+    fragments: tuple = ()  # 映射回原文后的不连续片段；空值表示连续区间
 
 
 # 标签 -> 归一类别：决定"是否同类"（简称/全称、MOBILE/TEL 归同类）

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """案件工作区可视化前台 — 本地 Web 控制台"""
 
-import os, sys, re, json, subprocess, shutil, threading, tempfile
+import ipaddress, os, sys, re, json, subprocess, shutil, threading, tempfile
 import urllib.request as _urllib_req
+from urllib.parse import urlsplit
 from pathlib import Path
 from datetime import datetime
 
@@ -10,7 +11,9 @@ import html as _html_mod
 import mimetypes
 
 import yaml
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context, send_file, abort
+from flask import (Flask, render_template, request, jsonify, Response,
+                   stream_with_context, send_file, abort)
+from werkzeug.exceptions import RequestEntityTooLarge
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "auto_filer"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "bin"))
@@ -31,6 +34,52 @@ _SCENARIO_PROC = {
 app = Flask(__name__, template_folder="templates", static_folder="static")
 WS_DIR = Path(__file__).parent.parent.resolve()
 AF_DIR = WS_DIR / "auto_filer"
+sys.path.insert(0, str(WS_DIR))
+from auto_filer import daemon_control as _daemon_control
+from config_io import load_yaml, update_yaml
+from safety import (
+    MAX_CONTENT_LENGTH, MAX_UPLOAD_FILES, SafetyError, existing_regular_file,
+    is_relative_to, safe_case_root, safe_target_path, save_upload,
+    validate_basename, validate_case_name, validate_relative_target,
+)
+
+app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
+app.config["APP_PORT"] = 5080
+_DAEMON_START_TIMEOUT = 5.0
+
+
+@app.before_request
+def _enforce_local_request_boundary():
+    """Restrict mutating requests to loopback and local same-origin pages."""
+    if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return None
+    peer = request.remote_addr or ""
+    try:
+        is_loopback = ipaddress.ip_address(peer).is_loopback
+    except ValueError:
+        is_loopback = peer.lower() == "localhost"
+    if not is_loopback:
+        return jsonify({"ok": False, "error": "仅允许本机回环地址访问"}), 403
+
+    expected_port = int(app.config["APP_PORT"])
+    for header in ("Origin", "Referer"):
+        value = request.headers.get(header)
+        if not value:
+            continue
+        try:
+            parsed = urlsplit(value)
+            host = (parsed.hostname or "").lower()
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        except ValueError:
+            return jsonify({"ok": False, "error": "来源地址无效"}), 403
+        if host not in {"localhost", "127.0.0.1", "::1"} or port != expected_port:
+            return jsonify({"ok": False, "error": "请求来源不是本地同源页面"}), 403
+    return None
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def _request_too_large(_error):
+    return jsonify({"ok": False, "error": "上传请求超过 250 MB 限制"}), 413
 
 
 def _load_env():
@@ -71,9 +120,7 @@ def _inbox_files():
 
 def _load_config():
     p = AF_DIR / "config.yaml"
-    if p.exists():
-        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    return {}
+    return load_yaml(p, default={}) or {}
 
 
 def _case_meta_map():
@@ -87,9 +134,9 @@ def _case_dir(case_name: str) -> Path:
     m = _case_meta_map().get(case_name, {})
     ip = (m.get("import_path") or "").strip()
     if ip:
-        return Path(ip)
+        return Path(ip).expanduser().resolve()
     cdir = (m.get("cases_dir") or "").strip()
-    return (Path(cdir) / case_name) if cdir else (CASES / case_name)
+    return safe_case_root(Path(cdir).expanduser().resolve() if cdir else CASES, case_name)
 
 
 # 层级序号：核心名匹配（与 intake/auto_filer 一致），归档移动前把 core 路径解析成真实目录
@@ -128,12 +175,16 @@ def _detect_layout(src: Path) -> str:
 def _resolve_case_dest(case_dir: Path, subdir: str) -> Path:
     """把 core 子目录路径解析成真实(带层级序号)目录；复用 auto_filer 前缀无关解析，失败兜底。"""
     if not subdir:
-        return case_dir
+        raise SafetyError("目标目录不能为空")
+    validate_relative_target(subdir)
     try:
         from auto_filer import _resolve_dest
-        return _resolve_dest(case_dir, subdir)
+        resolved = _resolve_dest(case_dir, subdir)
+    except SafetyError:
+        raise
     except Exception:
-        return case_dir / subdir
+        resolved = safe_target_path(case_dir, subdir)
+    return safe_target_path(case_dir, str(resolved.relative_to(Path(case_dir).resolve())))
 
 
 def _case_folder_catalog(case_dir: Path, max_n: int = 120) -> list:
@@ -165,6 +216,28 @@ def _owning_case(p: Path):
     return best[0], best[1]
 
 
+def _case_file_roots() -> list[Path]:
+    """Roots permitted for manual file moves (never the whole workspace)."""
+    roots = [INBOX.resolve(), (CASES / "_未分类").resolve()]
+    for meta in _load_config().get("cases", []):
+        try:
+            root = _case_dir(meta.get("name", ""))
+            roots.extend((root, root / "_待确认来源"))
+        except (OSError, RuntimeError, SafetyError, ValueError):
+            continue
+    return roots
+
+
+def _pending_file_roots() -> list[Path]:
+    roots = []
+    for meta in _load_config().get("cases", []):
+        try:
+            roots.append(_case_dir(meta.get("name", "")) / "_待确认来源")
+        except (OSError, RuntimeError, SafetyError, ValueError):
+            continue
+    return roots
+
+
 # ── Routes ──────────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -174,20 +247,24 @@ def index():
 
 @app.route("/api/status")
 def api_status():
-    pid_file = AF_DIR / ".filer.pid"
-    running = False
-    pid = None
-    if pid_file.exists():
-        try:
-            pid = int(pid_file.read_text().strip())
-            os.kill(pid, 0)
-            running = True
-        except Exception:
-            pass
+    try:
+        daemon = _daemon_control.daemon_status(AF_DIR)
+        daemon_payload = {
+            "running": bool(daemon.running),
+            "ready": bool(daemon.ready),
+            "detail": daemon.detail,
+            "pid": daemon.pid,
+        }
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"守护进程状态读取失败：{exc}"}), 500
 
     return jsonify({
-        "daemon_running": running,
-        "daemon_pid": pid,
+        "ok": True,
+        "daemon": daemon_payload,
+        # Keep the legacy dashboard response fields while making the shared
+        # controller's ready/detail state available to newer callers.
+        "daemon_running": daemon_payload["running"],
+        "daemon_pid": daemon_payload["pid"],
         "inbox_count": len(_inbox_files()),
         "case_count": sum(
             1 for d in CASES.iterdir()
@@ -397,23 +474,27 @@ def api_case_stage():
     cfg_path = AF_DIR / "config.yaml"
     if not cfg_path.exists():
         return jsonify({"ok": False, "error": "config.yaml 不存在"}), 404
-    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
-    entry = next((c for c in cfg.get("cases", []) if c.get("name") == name), None)
-    if entry is None:
+    def _mutate(cfg):
+        cfg = cfg or {}
+        entry = next((c for c in cfg.get("cases", []) if c.get("name") == name), None)
+        if entry is None:
+            raise KeyError(name)
+        entry["stage"] = stage
+        if cn:
+            existing = entry.get("case_number")
+            if isinstance(existing, dict):
+                existing[stage] = cn
+            elif existing:
+                entry["case_number"] = ({"一审": existing, stage: cn}
+                                        if stage != "一审" else {stage: cn})
+            else:
+                entry["case_number"] = {stage: cn}
+        return cfg
+    try:
+        cfg = update_yaml(cfg_path, _mutate, default={})
+    except KeyError:
         return jsonify({"ok": False, "error": "未找到该案件（可能是导入/存量案件，未登记到 config）"}), 404
-    entry["stage"] = stage
-    if cn:                                   # 补录该阶段案号（键=阶段名，供按案号判阶段）
-        existing = entry.get("case_number")
-        if isinstance(existing, dict):
-            existing[stage] = cn
-        elif existing:                       # 旧的单串案号（通常是初始审级）→ 升级为按阶段字典
-            entry["case_number"] = ({"一审": existing, stage: cn}
-                                    if stage != "一审" else {stage: cn})
-        else:
-            entry["case_number"] = {stage: cn}
-    cfg_path.write_text(
-        yaml.dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False, width=120),
-        encoding="utf-8")
+    entry = next(c for c in cfg.get("cases", []) if c.get("name") == name)
     return jsonify({"ok": True, "name": name, "stage": stage,
                     "case_number": entry.get("case_number")})
 
@@ -429,19 +510,32 @@ def api_case_create():
     if import_existing:
         if not import_path:
             return jsonify({"error": "请选择要导入的案件文件夹"}), 400
-        src = Path(import_path)
+        try:
+            src = Path(import_path).expanduser().resolve()
+        except (OSError, RuntimeError, ValueError):
+            return jsonify({"error": "所选路径无效"}), 400
         if not src.is_dir():
             return jsonify({"error": "所选文件夹不存在"}), 404
-        name = (data.get("name") or src.name).strip()    # 默认用文件夹名，允许改显示名
+        try:
+            name = validate_case_name((data.get("name") or src.name).strip())
+        except SafetyError as exc:
+            return jsonify({"error": str(exc)}), 400
         if name in _case_meta_map():
             return jsonify({"error": "已有同名案件登记，请改用其它名称"}), 409
     else:
-        name = data.get("name", "").strip()
-        if not name:
-            return jsonify({"error": "案件名称不能为空"}), 400
+        try:
+            name = validate_case_name((data.get("name") or "").strip())
+        except SafetyError as exc:
+            return jsonify({"error": str(exc)}), 400
         # 检查真正的目标目录：自定义路径或默认 cases/
         _custom = (data.get("cases_dir") or "").strip()
-        _target = (Path(_custom) / name) if _custom else (CASES / name)
+        try:
+            case_parent = Path(_custom).expanduser().resolve() if _custom else CASES.resolve()
+            if case_parent.exists() and not case_parent.is_dir():
+                return jsonify({"error": "案件根目录不是文件夹"}), 400
+            _target = safe_case_root(case_parent, name)
+        except (SafetyError, OSError, RuntimeError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 400
         if _target.exists():
             return jsonify({"error": "案件文件夹已存在"}), 409
 
@@ -520,11 +614,11 @@ def api_case_create():
 
     # Resolve cases_dir：导入=已存在文件夹的父目录；新建=路径选择器或默认 CASES
     if import_existing:
-        custom_dir = str(Path(import_path).parent)
-        case_root = Path(custom_dir)
+        custom_dir = str(src.parent)
+        case_root = src.parent
     else:
         custom_dir = (data.get("cases_dir") or "").strip()
-        case_root = Path(custom_dir) if custom_dir else CASES
+        case_root = Path(custom_dir).expanduser().resolve() if custom_dir else CASES.resolve()
 
     entry = {
         "key": raw_key,
@@ -592,21 +686,23 @@ def api_case_create():
 
     # Update config.yaml
     cfg_path = AF_DIR / "config.yaml"
+    def _append_case(cfg):
+        cfg = cfg or {}
+        cases = cfg.setdefault("cases", [])
+        if any(c.get("name") == name or c.get("key") == raw_key for c in cases):
+            raise ValueError("案件名称或简称已存在")
+        cases.append(entry)
+        return cfg
     try:
-        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
-    except Exception:
-        cfg = {}
-    cfg.setdefault("cases", []).append(entry)
-    cfg_path.write_text(
-        yaml.dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False),
-        encoding="utf-8",
-    )
+        update_yaml(cfg_path, _append_case, default={})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 409
 
     # 导入模式：文件夹已存在，原样保留，不铺标准子目录。新建模式才建目录+脚手架。
     if import_existing:
         return jsonify({"ok": True, "name": name, "imported": True})
 
-    case_dir = case_root / name
+    case_dir = safe_case_root(case_root, name)
     case_dir.mkdir(parents=True, exist_ok=True)
     if _HAS_INTAKE:
         proc_type = _SCENARIO_PROC.get(entry.get("scenario", ""), "civil")
@@ -875,8 +971,10 @@ def api_preview():
 def api_inbox_file():
     """预览收件箱里的文件（按文件名，防目录穿越）——供归类弹窗右侧核查用。"""
     name = request.args.get("name", "")
-    p = (INBOX / name).resolve()
-    if p.parent != INBOX.resolve() or not p.exists() or not p.is_file():
+    try:
+        validate_basename(name, "文件名")
+        p = existing_regular_file(INBOX / name, [INBOX])
+    except (SafetyError, FileNotFoundError, TypeError, ValueError):
         abort(404)
     return _serve_file_preview(p)
 
@@ -905,21 +1003,61 @@ def api_browse_directory():
     return jsonify({"ok": False, "path": "", "manual": True})
 
 
-# ── LLM Preflight（异步，上传后立即后台运行）───────────────────────────────
+# ── 本地规则预判（异步，上传后按需运行）──────────────────────────────────────
 _preflight_cache: dict = {}   # filename → result dict
 _preflight_lock  = threading.Lock()
 
-def _run_preflight(filename: str, filepath: Path) -> None:
-    """后台线程：OCR + Qwen 首读，结果写入内存缓存和 preflight sidecar。"""
+
+def _local_prediction(filename: str, filepath: Path) -> dict:
+    """Deterministic preflight shared by the UI and the archive worker."""
+    cfg = _load_config()
+    rules = cfg.get("rules", [])
+    cases = cfg.get("cases", [])
     try:
-        from llm_reader import llm_preflight, map_to_target
-        cfg_path = AF_DIR / "config.yaml"
-        rules = []
-        try:
-            rules = (yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}).get("rules", [])
-        except Exception:
-            pass
-        result = llm_preflight(str(filepath), rules)
+        from llm_reader import extract_text
+        text, method = extract_text(str(filepath))
+    except Exception:
+        text, method = "", "failed"
+    from auto_filer import SmartNamer, detect_source, match_case, match_rule
+    case_key, case_name = match_case(filename, text or "", cases)
+    case_cfg = next((c for c in cases if c.get("key") == case_key), {})
+    title = (SmartNamer.extract_title(text or "")
+             or SmartNamer.extract_heading(text or "") or "")
+    source = detect_source(text or "", case_cfg) if case_cfg else None
+    allowed = None
+    if case_cfg:
+        scenario = case_cfg.get("scenario")
+        if scenario:
+            allowed = {"通用", scenario}
+    rule = match_rule(filename, text or "", rules, title, source, allowed)
+    target = rule.get("target") if rule else None
+    doc_type = ((rule or {}).get("rename_pattern") or title or
+                SmartNamer.extract_title(filename) or "")
+    score = (rule or {}).get("_match_score", 0) or 0
+    confidence = round(min(0.99, max(0.0, float(score) / 150.0)), 2) if rule else 0.0
+    source_zh = {"ours": "我方", "opposing": "对方", "court": "法院"}.get(source, "")
+    return {
+        "ok": True,
+        "method": "local_rules",
+        "filename": filename,
+        "case_key": case_key,
+        "case_name": case_name,
+        "target": target,
+        "llm_target": target,  # compatibility field; this is never model output
+        "doctype": doc_type,
+        "文件性质": doc_type,
+        "来源方": source_zh,
+        "source": source,
+        "confidence": confidence,
+        "extract_method": method,
+        "事项": "本地规则预判（请核对后确认）",
+    }
+
+
+def _run_preflight(filename: str, filepath: Path) -> None:
+    """后台线程：本地文本提取 + 规则预判，不访问 Ollama。"""
+    try:
+        result = _local_prediction(filename, filepath)
     except Exception as e:
         result = {"ok": False, "error": str(e), "method": "error"}
 
@@ -938,23 +1076,41 @@ def _run_preflight(filename: str, filepath: Path) -> None:
 def api_upload():
     if "files" not in request.files:
         return jsonify({"error": "no files"}), 400
+    files = request.files.getlist("files")
+    if not files:
+        return jsonify({"error": "未上传任何文件"}), 400
+    if len(files) > MAX_UPLOAD_FILES:
+        return jsonify({"error": f"单次最多上传 {MAX_UPLOAD_FILES} 个文件"}), 400
+    try:
+        names = [validate_basename(f.filename, "上传文件名") for f in files]
+    except SafetyError as exc:
+        return jsonify({"error": str(exc)}), 400
     uploaded = []
-    for f in request.files.getlist("files"):
-        if f.filename:
-            fp = INBOX / f.filename
-            f.save(str(fp))
-            uploaded.append(f.filename)
+    errors = []
+    for f, name in zip(files, names):
+        try:
+            fp = save_upload(f, INBOX, name)
+            uploaded.append(fp.name)
             with _preflight_lock:
-                _preflight_cache.pop(f.filename, None)
-    return jsonify({"uploaded": uploaded, "count": len(uploaded)})
+                _preflight_cache.pop(fp.name, None)
+        except Exception as exc:
+            errors.append(str(exc))
+    if errors and not uploaded:
+        return jsonify({"ok": False, "error": "上传失败", "errors": errors}), 500
+    return jsonify({"ok": not errors, "uploaded": uploaded, "count": len(uploaded),
+                    "errors": errors}), (400 if errors else 200)
 
 
 @app.route("/api/preflight/trigger/<path:filename>", methods=["POST"])
 def api_preflight_trigger(filename: str):
-    """用户选择智能识别后，按需启动 LLM 首读线程。"""
-    filepath = INBOX / filename
-    if not filepath.is_file():
-        return jsonify({"ok": False, "error": "文件不在收件箱"})
+    """按需启动本地规则预判线程。"""
+    try:
+        validate_basename(filename, "文件名")
+        filepath = existing_regular_file(INBOX / filename, [INBOX])
+    except FileNotFoundError:
+        return jsonify({"ok": False, "error": "文件不在收件箱"}), 404
+    except (SafetyError, TypeError, ValueError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
     with _preflight_lock:
         _preflight_cache.pop(filename, None)
     threading.Thread(target=_run_preflight, args=(filename, filepath), daemon=True).start()
@@ -963,7 +1119,7 @@ def api_preflight_trigger(filename: str):
 
 @app.route("/api/preflight/<path:filename>")
 def api_preflight(filename: str):
-    """查询 LLM 首读结果。status: pending | done"""
+    """查询本地规则预判结果。status: pending | done"""
     with _preflight_lock:
         result = _preflight_cache.get(filename)
     if result is None:
@@ -975,40 +1131,14 @@ def api_preflight(filename: str):
 def api_classify_predict(filename: str):
     """预测某收件箱文件的归类（案件 + 目标文件夹 + 文书类型），只预测不落盘。
     供「智能识别」预填表单、让用户最后确认再归档。"""
-    p = (INBOX / filename).resolve()
-    if p.parent != INBOX.resolve() or not p.exists() or not p.is_file():
+    try:
+        validate_basename(filename, "文件名")
+        p = existing_regular_file(INBOX / filename, [INBOX])
+    except FileNotFoundError:
         return jsonify({"ok": False, "error": "文件不存在"}), 404
-    cfg   = _load_config()
-    rules = cfg.get("rules", [])
-    cases = cfg.get("cases", [])
-    from llm_reader import extract_text, llm_preflight
-    try:
-        text, _ = extract_text(str(p))
-    except Exception:
-        text = ""
-    # ① 案件匹配（复用归档引擎的 match_case：案号优先、再关键词）
-    case_key = None
-    try:
-        import sys as _sys
-        if str(AF_DIR) not in _sys.path:
-            _sys.path.insert(0, str(AF_DIR))
-        from auto_filer import match_case
-        res = match_case(filename, text or "", cases)
-        case_key = res[0] if res else None
-    except Exception:
-        pass
-    # ② 目标文件夹 / 文书类型：优先已缓存的 LLM 首读，否则现算
-    with _preflight_lock:
-        pf = _preflight_cache.get(filename)
-    if not (pf and pf.get("ok")):
-        try:
-            pf = llm_preflight(str(p), rules)
-        except Exception:
-            pf = {}
-    return jsonify({"ok": True,
-                    "case_key": case_key,
-                    "target":  (pf or {}).get("llm_target"),
-                    "doctype": (pf or {}).get("文件性质")})
+    except (SafetyError, TypeError, ValueError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify(_local_prediction(filename, p))
 
 
 @app.route("/api/classify-options")
@@ -1086,8 +1216,19 @@ def api_sidecar():
     filename = (data.get("filename") or "").strip()
     if not filename:
         return jsonify({"ok": False, "error": "filename required"}), 400
-    if not (INBOX / filename).exists():
+    try:
+        validate_basename(filename, "文件名")
+        existing_regular_file(INBOX / filename, [INBOX])
+    except FileNotFoundError:
         return jsonify({"ok": False, "error": "文件不在收件箱"}), 404
+    except (SafetyError, TypeError, ValueError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    if data.get("target"):
+        try:
+            validate_relative_target(str(data["target"]), "目标目录")
+        except SafetyError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
 
     payload = {k: data[k] for k in ("case_key", "source", "target", "doc_type", "name")
                if data.get(k)}
@@ -1296,8 +1437,7 @@ def api_pending():
 
 @app.route("/api/suggest-folder", methods=["POST"])
 def api_suggest_folder():
-    """智能归位(A档)：给定文件，建议它归入【所属案件已有的真实文件夹】之一。
-    只建议、不移动。前端拿到 target/confidence 后由用户一键确认（走 /api/pending/resolve）。"""
+    """本地规则归位建议：只建议、不移动。"""
     p = _preview_safe_path((request.json or {}).get("path", ""))
     case_name, case_dir = _owning_case(p)
     if not case_dir:
@@ -1306,12 +1446,8 @@ def api_suggest_folder():
     if not catalog:
         return jsonify({"ok": False, "error": "该案件没有可归入的子文件夹"}), 400
 
-    llm_cfg = _load_config().get("llm", {})
-    if not llm_cfg.get("enabled"):
-        return jsonify({"ok": False, "error": "LLM 未启用（config.yaml → llm.enabled）"}), 400
     try:
         from llm_reader import extract_text
-        from llm_classify import llm_doctype, llm_pick_folder
     except Exception as e:
         return jsonify({"ok": False, "error": f"分类模块不可用：{e}"}), 500
 
@@ -1320,10 +1456,24 @@ def api_suggest_folder():
     except Exception:
         text = ""
     case_cfg = _case_meta_map().get(case_name, {})
-    dt = llm_doctype(text, p.name, llm_cfg, case_cfg) or {}
-    doc_type = dt.get("doc_type", "")
-    source = dt.get("source")
-    pick = llm_pick_folder(doc_type, source, catalog, llm_cfg) if doc_type else None
+    from auto_filer import SmartNamer, detect_source, match_rule
+    title = (SmartNamer.extract_title(text or "")
+             or SmartNamer.extract_heading(text or "") or "")
+    source = detect_source(text or "", case_cfg)
+    allowed = None
+    if case_cfg.get("scenario"):
+        allowed = {"通用", case_cfg["scenario"]}
+    rule = match_rule(p.name, text or "", _load_config().get("rules", []),
+                      title, source, allowed)
+    doc_type = ((rule or {}).get("rename_pattern") or title or "")
+    target = (rule or {}).get("target")
+    if target:
+        try:
+            validate_relative_target(target, "目标目录")
+        except SafetyError:
+            target = None
+    score = (rule or {}).get("_match_score", 0) or 0
+    confidence = round(min(0.99, max(0.0, float(score) / 150.0)), 2) if target else 0.0
 
     # 文件当前所在的相对子目录（用于提示"已在X / 建议移到Y"）
     try:
@@ -1338,8 +1488,9 @@ def api_suggest_folder():
         "name": p.name,
         "doc_type": doc_type,
         "source": source,
-        "target": (pick or {}).get("target"),
-        "confidence": round((pick or {}).get("confidence", 0) or 0, 2),
+        "target": target,
+        "confidence": confidence,
+        "method": "local_rules",
         "current": cur,
         "catalog": catalog,
     })
@@ -1357,15 +1508,27 @@ def api_pending_resolve():
     if not src_path or not case_name or not dest_sub or not new_name:
         return jsonify({"ok": False, "error": "参数不完整"}), 400
 
-    src = Path(src_path)
-    if not src.exists():
+    try:
+        validate_case_name(case_name)
+        src = existing_regular_file(src_path, _case_file_roots())
+        dest_sub = validate_relative_target(dest_sub, "目标目录")
+        new_name = validate_basename(new_name, "新文件名")
+    except FileNotFoundError:
         return jsonify({"ok": False, "error": "文件不存在"}), 404
+    except (SafetyError, TypeError, ValueError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
-    case_dir = _case_dir(case_name)
+    try:
+        case_dir = _case_dir(case_name)
+    except (SafetyError, OSError, RuntimeError, ValueError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
     if not case_dir.exists():
         return jsonify({"ok": False, "error": "案件不存在"}), 404
 
-    dest_dir = _resolve_case_dest(case_dir, dest_sub)   # core → 真实(带层级序号)目录
+    try:
+        dest_dir = _resolve_case_dest(case_dir, dest_sub)   # core → 真实(带层级序号)目录
+    except (SafetyError, OSError, RuntimeError, ValueError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / new_name
     if dest.exists():
@@ -1405,25 +1568,32 @@ def api_pending_resolve():
 @app.route("/api/daemon/start", methods=["POST"])
 def api_daemon_start():
     try:
-        result = subprocess.run(
-            ["bash", str(WS_DIR / "bin/filer.sh"), "start"],
-            capture_output=True, text=True, timeout=10,
+        result = _daemon_control.start_daemon(
+            AF_DIR,
+            python_executable=sys.executable,
+            cwd=AF_DIR,
+            timeout=_DAEMON_START_TIMEOUT,
         )
-        return jsonify({"output": result.stdout, "success": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"守护进程启动失败：{exc}"}), 500
+    if not result.ok:
+        status_code = 409 if result.gate_blocked else 500
+        return jsonify({"ok": False, "error": result.error or "守护进程未启动"}), status_code
+    body = {"ok": True, "pid": result.pid}
+    if result.already_running:
+        body["already_running"] = True
+    return jsonify(body)
 
 
 @app.route("/api/daemon/stop", methods=["POST"])
 def api_daemon_stop():
     try:
-        result = subprocess.run(
-            ["bash", str(WS_DIR / "bin/filer.sh"), "stop"],
-            capture_output=True, text=True, timeout=10,
-        )
-        return jsonify({"output": result.stdout, "success": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        result = _daemon_control.stop_daemon(AF_DIR, timeout=_DAEMON_START_TIMEOUT)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"守护进程停止失败：{exc}"}), 500
+    if not result.ok:
+        return jsonify({"ok": False, "error": result.error or "守护进程未停止"}), 500
+    return jsonify({"ok": True})
 
 
 # ── Loci 文件问答（本地 Qwen，SSE 流式）────────────────────────────────────
@@ -1748,7 +1918,7 @@ def api_loci_chat():
 sys.path.insert(0, str(Path(__file__).parent.parent / "loci"))
 try:
     from desensitize import (
-        Registry, QwenNER, make_ocr, health_check, canon,
+        Registry, make_ocr, canon,
         desensitize_tree, desensitize_files, desensitize_md_file,
         to_markdown, analyze_text, apply_review, vault_save, vault_load,
         render as _dsz_render, restore as _dsz_restore, build_restore_map,
@@ -1807,7 +1977,8 @@ def _run_desensitize_case(src: Path, dst: Path, lang: str, cats=None) -> None:
     g = _DESENS_CASE_JOB
     try:
         reg = Registry(lang=lang)
-        ner = QwenNER(model="qwen2.5:7b", lang=lang)
+        # 自动脱敏只使用本地规则；显式聊天是唯一允许接入 Ollama 的功能。
+        ner = None
         ocr = make_ocr()
 
         def prog(i, total, rel, _res):
@@ -1828,7 +1999,7 @@ def _run_desensitize_file(src: Path, dst: Path, lang: str, cats=None) -> None:
     g = _DESENS_FILE_JOB
     try:
         reg = Registry(lang=lang)
-        ner = QwenNER(model="qwen2.5:7b", lang=lang)
+        ner = None
         desensitize_md_file(str(src), str(dst), reg=reg, ner=ner, cats=cats, allow=_load_allow())
         g["output"] = str(dst)
         g["name"]   = dst.name
@@ -1894,7 +2065,7 @@ def _run_desensitize_pack(files: list, dst: Path, lang: str, vault_password: str
     g = _DESENS_PACK_JOB
     try:
         reg = Registry(lang=lang)
-        ner = QwenNER(model="qwen2.5:7b", lang=lang)
+        ner = None
         ocr = make_ocr()
         used_names: set = set()
         # 存重试上下文（同一 reg/used_names → 重试失败件时化名仍一致）
@@ -2036,6 +2207,8 @@ def api_desensitize_upload():
     files = request.files.getlist("files")
     if not files:
         return jsonify({"ok": False, "error": "未上传任何文件"}), 400
+    if len(files) > MAX_UPLOAD_FILES:
+        return jsonify({"ok": False, "error": f"单次最多上传 {MAX_UPLOAD_FILES} 个文件"}), 400
     lang = request.form.get("lang", "zh")
     vault_password = (request.form.get("vault_password") or "").strip()
     cats_raw = request.form.get("cats", "")
@@ -2044,17 +2217,21 @@ def api_desensitize_upload():
     stamp = datetime.now().strftime("%y%m%d_%H%M%S")
     stage = WS_DIR / "_脱敏上传" / stamp
     stage.mkdir(parents=True, exist_ok=True)
+    try:
+        names = [validate_basename(f.filename, "上传文件名") for f in files]
+    except SafetyError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
     saved, rejected = [], []
-    for f in files:
-        if not f.filename:
-            continue
-        name = Path(f.filename).name          # 防目录穿越
+    for f, name in zip(files, names):
         if Path(name).suffix.lower() not in _DESENS_SUPPORTED:
             rejected.append(name)
             continue
-        fp = stage / name
-        f.save(str(fp))
-        saved.append(str(fp))
+        try:
+            fp = save_upload(f, stage, name)
+            saved.append(str(fp))
+        except Exception as exc:
+            rejected.append(f"{name}: {exc}")
     if not saved:
         shutil.rmtree(stage, ignore_errors=True)
         return jsonify({"ok": False, "error": "无受支持格式文件（支持 docx/doc/pdf/图片）"}), 400
@@ -2099,12 +2276,8 @@ def api_desensitize_analyze():
         return jsonify({"ok": False, "error": f"读取失败：{e}"}), 500
     if not (text or "").strip():
         return jsonify({"ok": False, "error": "无法从该文件提取文本"}), 400
+    # 复核预览也必须与自动脱敏一致：仅使用本地正则规则。
     ner = None
-    try:
-        if health_check():
-            ner = QwenNER(model="qwen2.5:7b", lang=lang)
-    except Exception:
-        ner = None
     spans = analyze_text(text, Registry(lang=lang), ner=ner, lang=lang, allow=_load_allow())
     if cats is not None:
         spans = [s for s in spans if canon(s["label"]) in cats]
@@ -2174,13 +2347,8 @@ _WF_IMG_EXT = {".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"
 
 
 def _get_wf_ner():
-    global _wf_ner_engine
-    if _wf_ner_engine is None:
-        try:
-            _wf_ner_engine = QwenNER(model="qwen2.5:7b", lang="zh") if health_check() else False
-        except Exception:
-            _wf_ner_engine = False
-    return _wf_ner_engine or None
+    # 工作流自动识别不连接 Ollama；保留函数以兼容现有调用点。
+    return None
 
 
 def _wf_norm(s):
@@ -2672,9 +2840,9 @@ def _run_classify_index(case_name: str, case_dir: Path) -> None:
     g = _CLASSIFY_JOB
     try:
         from llm_reader import extract_text
-        from llm_classify import llm_doctype, llm_pick_folder
-        llm_cfg = _load_config().get("llm", {})
+        from auto_filer import SmartNamer, detect_source, match_rule
         case_cfg = _case_meta_map().get(case_name, {})
+        cfg = _load_config()
         files = [f for f in sorted(case_dir.rglob("*"))
                  if f.is_file() and not f.name.startswith(".")]
         g["total"] = len(files)
@@ -2684,19 +2852,32 @@ def _run_classify_index(case_name: str, case_dir: Path) -> None:
             rel = f.relative_to(case_dir).as_posix()
             ext = f.suffix.lower()
             cat, dt, conf = "其他", "", 0.0
-            if ext in _DOC_EXTS and llm_cfg.get("enabled"):
+            if ext in _DOC_EXTS:
                 try:
                     text, _ = extract_text(str(f))
                 except Exception:
                     text = ""
                 if text.strip():
-                    d = llm_doctype(text, f.name, llm_cfg, case_cfg) or {}
-                    dt = d.get("doc_type", "") or ""
-                    if dt:
-                        pick = llm_pick_folder(dt, d.get("source"), _VIRTUAL_CATS,
-                                               llm_cfg, descriptions=_VIRTUAL_CAT_DESC)
-                        if pick:
-                            cat, conf = pick["target"], pick["confidence"]
+                    title = (SmartNamer.extract_title(text)
+                             or SmartNamer.extract_heading(text) or "")
+                    source = detect_source(text, case_cfg)
+                    allowed = None
+                    if case_cfg.get("scenario"):
+                        allowed = {"通用", case_cfg["scenario"]}
+                    rule = match_rule(f.name, text, cfg.get("rules", []),
+                                      title, source, allowed)
+                    dt = ((rule or {}).get("rename_pattern") or title or "")
+                    target = (rule or {}).get("target")
+                    if target:
+                        try:
+                            validate_relative_target(target, "目标目录")
+                        except SafetyError:
+                            target = None
+                    if target:
+                        top = target.split("/", 1)[0]
+                        cat = top if top in _VIRTUAL_CATS else "其他"
+                        score = (rule or {}).get("_match_score", 0) or 0
+                        conf = min(0.99, max(0.0, float(score) / 150.0))
             items.append({"path": str(f), "rel": rel, "name": f.name,
                           "ext": ext.lstrip("."), "doc_type": dt,
                           "category": cat, "confidence": round(conf, 2)})
@@ -2867,19 +3048,20 @@ def api_search():
 
 def _set_case_status(case_name, status):
     cfg_path = AF_DIR / "config.yaml"
-    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
-    found = False
-    for c in cfg.get("cases", []):
-        if c.get("name") == case_name:
-            c["status"] = status
-            found = True
-            break
-    if not found:
-        cfg.setdefault("cases", []).append({"name": case_name, "key": case_name[:20], "status": status})
-    cfg_path.write_text(
-        yaml.dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False),
-        encoding="utf-8",
-    )
+    try:
+        validate_case_name(case_name)
+    except SafetyError as exc:
+        return jsonify({"error": str(exc)}), 400
+    def _mutate(cfg):
+        cfg = cfg or {}
+        for c in cfg.get("cases", []):
+            if c.get("name") == case_name:
+                c["status"] = status
+                return cfg
+        cfg.setdefault("cases", []).append(
+            {"name": case_name, "key": case_name[:20], "status": status})
+        return cfg
+    update_yaml(cfg_path, _mutate, default={})
     return jsonify({"ok": True})
 
 
@@ -2948,17 +3130,21 @@ def api_case_delete(case_name):
     data = request.json or {}
     delete_folder = data.get("delete_folder", False)
 
+    try:
+        validate_case_name(case_name)
+        case_dir = _case_dir(case_name)
+    except (SafetyError, OSError, RuntimeError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
     # 1) 从 config 移除登记（若有）
     cfg_path = AF_DIR / "config.yaml"
-    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
-    cfg["cases"] = [c for c in cfg.get("cases", []) if c.get("name") != case_name]
-    cfg_path.write_text(
-        yaml.dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False),
-        encoding="utf-8",
-    )
+    def _remove(cfg):
+        cfg = cfg or {}
+        cfg["cases"] = [c for c in cfg.get("cases", []) if c.get("name") != case_name]
+        return cfg
+    update_yaml(cfg_path, _remove, default={})
 
     # 2) 处理文件夹
-    case_dir = _case_dir(case_name)
     moved_to = None
     if case_dir.exists() and case_dir.is_dir():
         if delete_folder:

@@ -19,7 +19,7 @@ _SKIP_NAMES = {".DS_Store", ".gitkeep"}
 
 
 def desensitize_tree(src_root, dst_root, reg=None, ner=None, ocr_engine=None,
-                     mode="alias", detect_seals=True, lang="zh",
+                     mode="alias", detect_seals=True, lang="both",
                      vault_password=None, progress=None, use_md=True, cats=None, allow=None):
     """镜像脱敏整棵目录树。
 
@@ -66,13 +66,16 @@ def desensitize_tree(src_root, dst_root, reg=None, ner=None, ocr_engine=None,
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 if ext == ".pdf":
                     n = desensitize_pdf(str(src), str(dst), reg, ner=ner, mode=mode,
-                                        ocr_engine=get_ocr(), detect_seals=detect_seals)
+                                        ocr_engine=get_ocr(), detect_seals=detect_seals,
+                                        lang=lang, cats=cats, allow=allow)
                 elif ext == ".docx":
-                    n = desensitize_docx(str(src), str(dst), reg, ner=ner)
+                    n = desensitize_docx(str(src), str(dst), reg, ner=ner,
+                                         lang=lang, cats=cats, allow=allow)
                 else:
                     n = desensitize_image(str(src), str(dst), reg, ner=ner,
                                           engine=get_ocr(), mode=mode,
-                                          detect_seals=detect_seals)
+                                          detect_seals=detect_seals, lang=lang,
+                                          cats=cats, allow=allow)
             report["processed"] += 1
             report["hits"] += n
             if progress:
@@ -93,7 +96,7 @@ def desensitize_tree(src_root, dst_root, reg=None, ner=None, ocr_engine=None,
 
 
 def desensitize_files(file_list, dst_root, reg=None, ner=None, ocr_engine=None,
-                      lang="zh", vault_password=None, progress=None, cats=None,
+                      lang="both", vault_password=None, progress=None, cats=None,
                       should_cancel=None, used_names=None, allow=None):
     """把任意勾选的多个文件脱敏成一个扁平 Markdown 包（无视原目录结构）。
 

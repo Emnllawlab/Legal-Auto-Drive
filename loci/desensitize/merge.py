@@ -55,10 +55,11 @@ def _merge_same_category(spans, text):
                 cur["end"] = max(cur["end"], s.end)
                 cur["best"] = max(cur["best"], s,
                                   key=lambda x: (_trust(x.label), x.score))
+                cur["spans"].append(s)
             else:
                 if cur:
                     merged.append(_finalize(cur, text))
-                cur = {"start": s.start, "end": s.end, "best": s}
+                cur = {"start": s.start, "end": s.end, "best": s, "spans": [s]}
         if cur:
             merged.append(_finalize(cur, text))
     return merged
@@ -66,8 +67,24 @@ def _merge_same_category(spans, text):
 
 def _finalize(cur, text):
     b = cur["best"]
+    fragments = _merge_fragments(
+        fragment
+        for s in cur.get("spans", [b])
+        for fragment in (s.fragments or ((s.start, s.end),))
+    )
+    display = "".join(text[a:b] for a, b in fragments)
     return Span(cur["start"], cur["end"], b.label,
-                text[cur["start"]:cur["end"]], b.source, b.score)
+                display, b.source, b.score, tuple(fragments))
+
+
+def _merge_fragments(fragments):
+    out = []
+    for start, end in sorted(fragments):
+        if not out or start > out[-1][1]:
+            out.append([start, end])
+        else:
+            out[-1][1] = max(out[-1][1], end)
+    return [(a, b) for a, b in out]
 
 
 # ---------- 阶段 2：异类优先级涂色裁剪 ----------
@@ -81,7 +98,15 @@ def _resolve_cross_category(spans, text):
             trimmed = not (fs == s.start and fe == s.end)
             if trimmed and fe - fs < _min_len(canon(s.label)):
                 continue
-            result.append(Span(fs, fe, s.label, text[fs:fe], s.source, s.score))
+            fragments = []
+            for a, b in s.fragments or ((s.start, s.end),):
+                left, right = max(a, fs), min(b, fe)
+                if left < right:
+                    fragments.append((left, right))
+            fragments = _merge_fragments(fragments or [(fs, fe)])
+            display = "".join(text[a:b] for a, b in fragments)
+            result.append(Span(fs, fe, s.label, display, s.source, s.score,
+                               tuple(fragments)))
             insort(occupied, (fs, fe))
     result.sort(key=lambda x: x.start)
     return result

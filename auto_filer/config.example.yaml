@@ -1,0 +1,3318 @@
+# Loci 脱敏默认配置：包含通用归档规则，不包含案件、当事人、本机路径或凭据。
+
+global:
+  workspace: ${WORKSPACE}
+  inbox_dir: ${WORKSPACE}/inbox
+  case_root: ${WORKSPACE}/cases
+  log_dir: ${WORKSPACE}/logs
+  mode: suggest
+  rename_files: true
+naming:
+  mode: smart
+  firm_abbr: ZL
+cases: []
+rules:
+- keywords:
+  - 委托代理协议
+  - 委托合同
+  - retainer agreement
+  - retainer letter
+  - 代理协议
+  - 聘请协议
+  - 法律服务协议
+  - 律师服务协议
+  - 法律顾问协议
+  - 收费约定
+  title_keywords:
+  - 委托代理协议
+  - 代理合同
+  - 委托合同
+  - 聘请协议
+  - 法律服务协议
+  - 律师服务协议
+  - Retainer Agreement
+  target: 00_签约与委托/委托代理协议
+  rename_pattern: 委托代理协议
+  scenario: 通用
+- keywords:
+  - 授权委托书
+  - power of attorney
+  - POA
+  - 授权书
+  - 特别授权书
+  negative_contexts:
+  - 司法委托书
+  - 鉴定委托书
+  - 鉴定申请书
+  - 司法鉴定申请
+  title_keywords:
+  - 授权委托书
+  - 特别授权书
+  - 授权书
+  target: 00_签约与委托/授权委托书
+  rename_pattern: 授权委托书
+  scenario: 通用
+- keywords:
+  - 利冲
+  - 利益冲突
+  - conflict check
+  - 冲突检索
+  - 利益冲突检查
+  target: 00_签约与委托/利益冲突检索
+  rename_pattern: 利益冲突检索
+  scenario: 通用
+- keywords:
+  - 接案笔录
+  - 首次会面
+  - 案情说明
+  - 初步咨询
+  - 案件接待
+  - 立案资料
+  target: 00_签约与委托/接案笔录
+  rename_pattern: 接案笔录
+  scenario: 通用
+- keywords:
+  - 营业执照
+  - 身份证
+  - 工商信息
+  - 企业信用
+  - 主体信息
+  - 法定代表人
+  - 统一社会信用代码
+  - 组织机构代码
+  - 护照
+  - 公司章程
+  - 工商档案
+  - 工商内档
+  - 股东名册
+  - 股权结构
+  - 注册信息
+  - 企业基本信息
+  - 注册资本
+  - 实际控制人
+  title_keywords:
+  - 营业执照
+  - 身份证明
+  - 主体信息
+  - 工商内档
+  target: 00_签约与委托/主体信息
+  rename_pattern: 主体信息
+  scenario: 通用
+- keywords:
+  - 报价
+  - 律师费
+  - 收费方案
+  - 费用方案
+  - fee proposal
+  - quote
+  - 收费标准
+  title_keywords:
+  - 报价方案
+  - 收费方案
+  - 律师费报价
+  target: 00_签约与委托/报价方案
+  rename_pattern: 报价方案
+  scenario: 通用
+- keywords:
+  - 案件大事记
+  - 大事记
+  - 时间轴
+  - 事件梳理
+  - 案件进展
+  - 案件年表
+  - chronology
+  - case chronology
+  - 事件年表
+  target: 00_签约与委托/案件大事记
+  rename_pattern: 案件大事记
+  scenario: 通用
+- keywords:
+  - 购销合同
+  - 采购合同
+  - 销售合同
+  - 供货合同
+  - 买卖合同
+  - 服务合同
+  - 服务协议
+  - 劳务合同
+  - 承揽合同
+  - 合作协议
+  - 合作合同
+  - 战略合作
+  - 框架协议
+  - 补充协议
+  - 补充合同
+  - 变更协议
+  - 修正案
+  - 股权转让协议
+  - 投资协议
+  - 增资协议
+  - 租赁合同
+  - 租赁协议
+  - 房屋租赁
+  - 保密协议
+  - NDA
+  - 不竞争协议
+  - 劳动合同
+  - 雇佣协议
+  - 聘用合同
+  - purchase agreement
+  - supply agreement
+  - service agreement
+  - distribution agreement
+  - licensing agreement
+  - employment agreement
+  - non-disclosure agreement
+  - non-compete agreement
+  - shareholder agreement
+  - joint venture agreement
+  - MOU
+  - LOI
+  - term sheet
+  - memorandum of understanding
+  title_keywords:
+  - 购销合同
+  - 采购合同
+  - 销售合同
+  - 供货合同
+  - 买卖合同
+  - 服务合同
+  - 服务协议
+  - 劳务合同
+  - 承揽合同
+  - 合作协议
+  - 框架协议
+  - 补充协议
+  - 变更协议
+  - 保密协议
+  - NDA
+  - 股权转让协议
+  - 投资协议
+  - 租赁合同
+  - 劳动合同
+  - Purchase Agreement
+  - Service Agreement
+  - Supply Agreement
+  - Distribution Agreement
+  - Licensing Agreement
+  - Employment Agreement
+  - NDA
+  - MOU
+  - LOI
+  target: 01_案件资料/客户提供材料/合同文件
+  rename_pattern: 合同
+  scenario: 通用
+- keywords:
+  - 往来函件
+  - 商务函
+  - 来函
+  - 回函
+  - 律师函
+  - 催告函
+  - 告知函
+  - 警告函
+  - 声明函
+  - 催款函
+  - 索赔函
+  - 理赔函
+  - 拒绝函
+  - 邀请函
+  - 确认函
+  - 询问函
+  - 回复函
+  - 通知函
+  - demand letter
+  - cease and desist
+  - legal notice
+  - formal notice
+  - notice letter
+  - letter of demand
+  title_keywords:
+  - 律师函
+  - 催告函
+  - 告知函
+  - 警告函
+  - 声明函
+  - 催款函
+  - 索赔函
+  - 确认函
+  - 询问函
+  - 回复函
+  - 通知函
+  - 邀请函
+  - 商务函
+  - Demand Letter
+  - Cease and Desist
+  - Legal Notice
+  target: 01_案件资料/客户提供材料/往来函件
+  rename_pattern: 往来函件
+  scenario: 通用
+- keywords:
+  - 技术文件
+  - 技术规范
+  - 产品规格
+  - 规格书
+  - 技术标准
+  - 设计图纸
+  - 技术图纸
+  - 操作手册
+  - 安装手册
+  - 产品说明书
+  - 使用说明书
+  - 技术参数
+  - datasheet
+  - user manual
+  - technical specification
+  - product specification
+  title_keywords:
+  - 技术规范
+  - 产品规格
+  - 规格书
+  - 技术标准
+  - 产品说明书
+  - 操作手册
+  - 安装手册
+  - 使用说明书
+  - Technical Specification
+  - Product Specification
+  - Datasheet
+  target: 01_案件资料/客户提供材料/技术文件
+  rename_pattern: 技术文件
+  scenario: 通用
+- keywords:
+  - 勘验
+  - 现场勘察
+  - 现场照片
+  - 现场记录
+  - 现场勘验
+  - 现场检查
+  - 现场查验
+  - 勘察笔录
+  - 勘验报告
+  title_keywords:
+  - 现场勘验报告
+  - 现场勘察报告
+  - 勘验笔录
+  - 现场勘验通知
+  - 勘验通知书
+  - 现场勘察通知
+  target: 01_案件资料/现场勘验
+  rename_pattern: 现场勘验
+  scenario: 通用
+- keywords:
+  - 银行流水
+  - 银行对账单
+  - 资金流水
+  - 账户明细
+  - 银行记录
+  - 交易流水
+  - 交易明细
+  - 账户交易记录
+  - 资金往来
+  - 财务报表
+  - 资产负债表
+  - 利润表
+  - 损益表
+  - 现金流量表
+  - bank statement
+  - financial statement
+  - account statement
+  title_keywords:
+  - 银行流水
+  - 银行对账单
+  - 账户明细
+  - 财务报表
+  - Bank Statement
+  - Financial Statement
+  - Account Statement
+  target: 01_案件资料/客户提供材料/财务文件
+  rename_pattern: 财务文件
+  scenario: 通用
+- keywords:
+  - 录音
+  - 录像
+  - 录音资料
+  - 录音证据
+  - 录像资料
+  - 视频资料
+  - 监控录像
+  - 监控视频
+  - 通话录音
+  - 会议录音
+  - CCTV
+  - audio recording
+  - video recording
+  - surveillance footage
+  - 录音整理
+  - 录音摘要
+  title_keywords:
+  - 录音资料
+  - 录像资料
+  - 监控录像
+  target: 01_案件资料/客户提供材料/录音录像
+  rename_pattern: 录音录像
+  scenario: 通用
+- keywords:
+  - 事实梳理
+  - 事件经过
+  - 事实陈述
+  - 案情梳理
+  - 案情概述
+  - 时间顺序
+  - 事件时间线
+  target: 01_案件资料/事实梳理
+  rename_pattern: 事实梳理
+  scenario: 通用
+- keywords:
+  - 法律分析
+  - 法律备忘录
+  - 法律研究
+  - legal research
+  - 法律意见
+  - 研究报告
+  - 分析意见
+  - 法律问题
+  title_keywords:
+  - 法律意见书
+  - 法律备忘录
+  - 研究备忘录
+  - 法律分析
+  - 尽职调查报告
+  - 法律研究报告
+  target: 02_法律研究/研究备忘录
+  rename_pattern: 法律研究
+  scenario: 通用
+- keywords:
+  - 案例检索
+  - 类案
+  - case search
+  - 判例
+  - 裁判要旨
+  - 裁判规则
+  - 参考案例
+  - 类似案件
+  - 同类案件
+  - 案例分析
+  target: 02_法律研究/类案检索
+  rename_pattern: 案例检索
+  scenario: 通用
+- keywords:
+  - 法律法规
+  - 条文
+  - 司法解释
+  - 法规汇编
+  - 法条
+  - 立法
+  - 法律汇编
+  - 规范性文件
+  - 部门规章
+  - 地方性法规
+  - 最高人民法院
+  - 最高人民检察院
+  - 司法解释汇编
+  title_keywords:
+  - 司法解释
+  - 法规汇编
+  - 法律法规
+  - 法律文本
+  target: 02_法律研究/法律法规
+  rename_pattern: 法律法规
+  scenario: 通用
+- keywords:
+  - 质证意见
+  - 质证
+  - cross-examination
+  - 质证意见书
+  - 对证据的意见
+  - 证据质证
+  title_keywords:
+  - 质证意见
+  - 质证意见书
+  - 质证说明
+  target: 03_证据/质证意见
+  rename_pattern: 质证意见
+  scenario: 通用
+- keywords:
+  - 证据目录
+  - 证据清单
+  - evidence list
+  - 附件清单
+  - 材料目录
+  - 材料清单
+  - 文件清单
+  - 资料清单
+  - 证据列表
+  - 证据索引
+  title_keywords:
+  - 证据目录
+  - 证据清单
+  - 材料目录
+  - 材料清单
+  - 文件清单
+  - 附件清单
+  target: 03_证据/我方证据
+  rename_pattern: 证据目录
+  scenario: 通用
+- keywords:
+  - 对方证据
+  - opposing evidence
+  - 对方材料
+  - 被申请人证据
+  - 被告证据
+  - 对方提交证据
+  target: 03_证据/对方证据
+  rename_pattern: 对方证据
+  scenario: 通用
+- keywords:
+  - 证据交换
+  - 证据开示
+  - 交换证据
+  - 证据交换记录
+  - 举证交换
+  - 举证期间
+  title_keywords:
+  - 证据交换笔录
+  - 证据交换记录
+  target: 03_证据/证据交换记录
+  rename_pattern: 证据交换
+  scenario: 通用
+- keywords:
+  - 证人陈述书
+  - 证人证词
+  - witness statement
+  - 证人证言
+  - 证人陈述
+  title_keywords:
+  - 证人陈述书
+  - 证人证词
+  - Witness Statement
+  target: 03_证据/证人陈述
+  rename_pattern: 证人陈述书
+  scenario: 通用
+- keywords:
+  - ESI
+  - electronically stored information
+  - 电子数据
+  - 电子证据
+  - 电子数据证据
+  - 数据提取
+  - 数据镜像
+  - 手机数据
+  - 电脑数据
+  - 数字取证
+  - 电子证据审查
+  title_keywords:
+  - 电子数据
+  - 电子证据
+  - ESI
+  - 数字取证报告
+  target: 03_证据/电子数据
+  rename_pattern: 电子数据证据
+  scenario: 通用
+- keywords:
+  - 证据材料
+  - 举证材料
+  - 补充证据
+  - 提交证据
+  - 庭审证据
+  title_keywords:
+  - 证据
+  - 举证材料
+  target: 03_证据/我方证据
+  rename_pattern: 证据材料
+  scenario: 通用
+  _comment: 通用证据捕获：文件名含'证据'但未命中更具体规则；来源修正将自动设定我方/对方方向
+- keywords:
+  - 送达回证
+  - 送达证明
+  - 送达地址确认书
+  - 留置送达
+  - 公告送达通知
+  - 邮寄送达凭证
+  - 电子送达回执
+  - EMS签收记录
+  - EMS回执
+  - 快递签收
+  - 挂号信回执
+  - proof of service
+  - affidavit of service
+  - certificate of service
+  title_keywords:
+  - 送达证明
+  - 邮寄送达
+  - EMS签收
+  - 快递单
+  - 邮单
+  - Proof of Service
+  - Affidavit of Service
+  - Certificate of Service
+  target: 04_诉讼文书/送达文件
+  rename_pattern: 送达文件
+  scenario: 中国民事
+- keywords:
+  - 民事起诉状
+  - 起诉状
+  title_keywords:
+  - 民事起诉状
+  - 行政起诉状
+  - 起诉状
+  target: 04_诉讼文书/起诉状
+  rename_pattern: 起诉状
+  scenario: 中国民事
+- keywords:
+  - 民事反诉状
+  - 反诉
+  title_keywords:
+  - 民事反诉状
+  - 反诉状
+  target: 04_诉讼文书/反诉状
+  rename_pattern: 反诉状
+  scenario: 中国民事
+- keywords:
+  - 民事答辩状
+  - 答辩状
+  - 答辩意见
+  - 行政答辩状
+  title_keywords:
+  - 民事答辩状
+  - 行政答辩状
+  - 答辩状
+  target: 04_诉讼文书/答辩状
+  rename_pattern: 答辩状
+  scenario: 中国民事
+- keywords:
+  - 民事上诉状
+  - 上诉状
+  - 上诉理由
+  - 上诉请求
+  - 被上诉人
+  title_keywords:
+  - 民事上诉状
+  - 行政上诉状
+  - 上诉状
+  target: 04_诉讼文书/上诉状
+  rename_pattern: 上诉状
+  scenario: 中国民事
+- keywords:
+  - 再审申请书
+  - 申请再审
+  - 民事再审申请书
+  - 再审理由
+  - retrial application
+  title_keywords:
+  - 民事再审申请书
+  - 再审申请书
+  target: 04_诉讼文书/再审申请书
+  rename_pattern: 再审申请书
+  scenario: 中国民事
+- keywords:
+  - 财产保全申请书
+  - 财产保全
+  - 资产冻结申请
+  - 查封申请
+  - 诉前保全申请书
+  - 诉讼保全申请书
+  - asset preservation
+  - property preservation
+  title_keywords:
+  - 财产保全申请书
+  - 诉前保全申请书
+  - 诉讼保全申请书
+  target: 04_诉讼文书/保全申请
+  rename_pattern: 财产保全申请书
+  scenario: 中国民事
+- keywords:
+  - 证据保全申请书
+  - 证据保全
+  - evidence preservation
+  title_keywords:
+  - 证据保全申请书
+  target: 04_诉讼文书/保全申请
+  rename_pattern: 证据保全申请书
+  scenario: 中国民事
+- keywords:
+  - 管辖权异议申请书
+  - 管辖异议
+  - 管辖权异议
+  - jurisdictional objection
+  - jurisdiction challenge
+  title_keywords:
+  - 管辖权异议申请书
+  - 管辖异议状
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 管辖权异议申请书
+  scenario: 中国民事
+- keywords:
+  - 变更诉讼请求申请书
+  - 变更诉讼请求
+  - 变更诉求申请
+  title_keywords:
+  - 变更诉讼请求申请书
+  - 变更诉讼请求
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 变更诉讼请求申请书
+  scenario: 中国民事
+- keywords:
+  - 鉴定申请书
+  - 司法鉴定申请书
+  - 申请司法鉴定
+  - 司法鉴定申请
+  title_keywords:
+  - 鉴定申请书
+  - 司法鉴定申请书
+  target: 06_专家工作/司法鉴定
+  rename_pattern: 鉴定申请书
+  scenario: 中国民事
+- keywords:
+  - 证人出庭申请书
+  - 申请证人出庭
+  - 证人出庭通知
+  title_keywords:
+  - 证人出庭申请书
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 证人出庭申请书
+  scenario: 中国民事
+- keywords:
+  - 延期举证申请书
+  - 申请延期举证
+  - 延期举证
+  title_keywords:
+  - 延期举证申请书
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 延期举证申请书
+  scenario: 中国民事
+- keywords:
+  - 回避申请书
+  - 申请回避
+  - 回避申请
+  title_keywords:
+  - 回避申请书
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 回避申请书
+  scenario: 中国民事
+- keywords:
+  - 追加当事人申请书
+  - 申请追加当事人
+  - 追加被告申请书
+  - 追加原告申请书
+  title_keywords:
+  - 追加当事人申请书
+  - 追加被告申请书
+  - 追加原告申请书
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 追加当事人申请书
+  scenario: 中国民事
+- keywords:
+  - 撤诉申请书
+  - 申请撤诉
+  - 撤回起诉申请书
+  title_keywords:
+  - 撤诉申请书
+  - 撤回起诉申请书
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 撤诉申请书
+  scenario: 中国民事
+- keywords:
+  - 调查令申请书
+  - 申请调查令
+  - 调查取证申请书
+  title_keywords:
+  - 调查令申请书
+  - 调查取证申请书
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 调查令申请书
+  scenario: 中国民事
+- keywords:
+  - 先予执行申请书
+  - 申请先予执行
+  title_keywords:
+  - 先予执行申请书
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 先予执行申请书
+  scenario: 中国民事
+- keywords:
+  - 中止诉讼申请书
+  - 申请中止诉讼
+  - 中止审理申请书
+  title_keywords:
+  - 中止诉讼申请书
+  - 中止审理申请书
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 中止诉讼申请书
+  scenario: 中国民事
+- keywords:
+  - 延期开庭申请书
+  - 申请延期开庭
+  - 申请延期审理
+  title_keywords:
+  - 延期开庭申请书
+  - 延期审理申请书
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 延期开庭申请书
+  scenario: 中国民事
+- keywords:
+  - 司法确认申请书
+  - 申请司法确认
+  - 人民调解协议司法确认
+  title_keywords:
+  - 司法确认申请书
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 司法确认申请书
+  scenario: 中国民事
+- keywords:
+  - 中止执行申请书
+  - 申请中止执行
+  title_keywords:
+  - 中止执行申请书
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 中止执行申请书
+  scenario: 中国民事
+- keywords:
+  - 申请书
+  title_keywords:
+  - 申请书
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 程序申请书
+  scenario: 中国民事
+- keywords:
+  - 代理词
+  - 代理意见
+  - 庭后补充意见
+  - 书面代理意见
+  title_keywords:
+  - 代理词
+  - 代理意见书
+  - 庭后补充意见
+  target: 04_诉讼文书/代理词
+  rename_pattern: 代理词
+  scenario: 中国民事
+- keywords:
+  - 合议庭组成人员告知书
+  - 合议庭成员告知书
+  - 合议庭组成人员
+  title_keywords:
+  - 合议庭组成人员告知书
+  - 合议庭成员告知书
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 合议庭组成人员告知书
+  scenario: 中国民事
+- keywords:
+  - 廉政监督卡
+  - 廉政监督
+  - 廉政建设监督卡
+  title_keywords:
+  - 廉政监督卡
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 廉政监督卡
+  scenario: 中国民事
+- keywords:
+  - 送达回证
+  - 送达证明
+  - 邮寄送达回证
+  - 回证
+  title_keywords:
+  - 送达回证
+  target: 04_诉讼文书/送达文件
+  rename_pattern: 送达回证
+  scenario: 中国民事
+- keywords:
+  - 诉讼服务告知书
+  - 诉讼服务告知
+  - 诉讼服务中心
+  title_keywords:
+  - 诉讼服务告知书
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 诉讼服务告知书
+  scenario: 中国民事
+- keywords:
+  - 应诉通知书
+  - 应诉通知
+  title_keywords:
+  - 应诉通知书
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 应诉通知书
+  scenario: 中国民事
+- keywords:
+  - 举证通知书
+  - 举证期限通知书
+  - 举证期限
+  - 举证须知
+  title_keywords:
+  - 举证通知书
+  - 举证期限通知书
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 举证通知书
+  scenario: 中国民事
+- keywords:
+  - 立案通知书
+  - 案件受理通知书
+  - 受理案件通知书
+  - 立案决定书
+  title_keywords:
+  - 立案通知书
+  - 案件受理通知书
+  - 受理通知书
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 立案通知书
+  scenario: 中国民事
+- keywords:
+  - 诉讼费缴费通知书
+  - 诉讼费通知书
+  - 诉讼费用缴纳通知书
+  - 诉讼费缴纳
+  title_keywords:
+  - 诉讼费缴费通知书
+  - 诉讼费通知书
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 诉讼费缴费通知书
+  scenario: 中国民事
+- keywords:
+  - 案件受理费缴费通知书
+  - 预交诉讼费用通知书
+  - 预交诉讼费通知书
+  - 预收诉讼费通知书
+  - 受理费通知书
+  title_keywords:
+  - 受理费缴费通知书
+  - 预交诉讼费用通知书
+  - 预交诉讼费通知书
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 预交诉讼费通知书
+  scenario: 中国民事
+- keywords:
+  - 送达地址确认书
+  - 确认送达地址
+  - 送达地址确认
+  title_keywords:
+  - 送达地址确认书
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 送达地址确认书
+  scenario: 中国民事
+- keywords:
+  - 决定书
+  - 驳回决定书
+  - 程序决定书
+  - 中止诉讼决定书
+  title_keywords:
+  - 决定书
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 决定书
+  scenario: 中国民事
+- keywords:
+  - 开庭传票
+  - 传票
+  - 开庭通知书
+  - 庭前会议通知书
+  title_keywords:
+  - 开庭传票
+  - 传票
+  - 开庭通知书
+  - 庭前会议通知书
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 开庭传票
+  scenario: 中国民事
+- keywords:
+  - 财产保全裁定书
+  - 财保
+  - 诉前财产保全
+  - 仲裁中财产保全
+  - 查封扣押冻结
+  - 行为保全裁定
+  title_keywords:
+  - 财产保全裁定书
+  - 诉前财产保全裁定书
+  - 行为保全裁定书
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 财产保全裁定书
+  scenario: 中国民事
+- keywords:
+  - 支付令
+  - 民督
+  - 督促程序
+  - 特发出如下支付令
+  title_keywords:
+  - 支付令
+  target: 08_判决与执行/判决书
+  rename_pattern: 支付令
+  scenario: 中国民事
+- keywords:
+  - 司惩
+  - 司法拘留
+  - 司法罚款
+  - 司法制裁
+  - 拘留决定书
+  - 罚款决定书
+  title_keywords:
+  - 司法拘留决定书
+  - 司法罚款决定书
+  - 拘留决定书
+  - 罚款决定书
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 司法制裁决定书
+  scenario: 中国民事
+- keywords:
+  - 民事调解书
+  - 当事人自愿达成如下协议
+  - 经本院主持调解
+  - 当事人自行和解达成如下协议
+  title_keywords:
+  - 民事调解书
+  - 调解书
+  target: 08_判决与执行/判决书
+  rename_pattern: 调解书
+  scenario: 中国民事
+- keywords:
+  - 裁定书
+  - 判决书
+  - 执行通知书
+  - 执行裁定书
+  - 合议庭组成人员告知书
+  - 廉政监督卡
+  - 送达回证
+  - 诉讼服务告知书
+  - 应诉通知书
+  - 举证通知书
+  - 立案通知书
+  - 案件受理通知书
+  - 诉讼费缴费通知书
+  - 预交诉讼费用通知书
+  - 送达地址确认书
+  - 决定书
+  title_keywords:
+  - 裁定书
+  - 判决书
+  - 通知书
+  - 决定书
+  - 受理通知书
+  - 举证通知书
+  - 应诉通知书
+  - 执行通知书
+  - 送达回证
+  - 廉政监督卡
+  - 送达地址确认书
+  target: 04_诉讼文书/法院来文
+  rename_pattern: 法院来文
+  scenario: 中国民事
+- keywords:
+  - 执行申请书
+  - 强制执行申请
+  - 执行申请
+  title_keywords:
+  - 执行申请书
+  - 强制执行申请书
+  target: 08_判决与执行/执行申请书
+  rename_pattern: 执行申请书
+  scenario: 中国民事
+- keywords:
+  - 执行异议申请书
+  - 案外人执行异议
+  - 执行异议之诉
+  - objection to execution
+  title_keywords:
+  - 执行异议申请书
+  - 案外人执行异议申请书
+  - 执行异议
+  target: 08_判决与执行/执行异议
+  rename_pattern: 执行异议申请书
+  scenario: 中国民事
+- keywords:
+  - 仲裁协议
+  - 仲裁条款
+  - 仲裁条款约定
+  - 独立仲裁协议
+  - arbitration agreement
+  - arbitration clause
+  - submission agreement
+  - arbitration provision
+  title_keywords:
+  - 仲裁协议
+  - 仲裁条款
+  - Arbitration Agreement
+  - Arbitration Clause
+  target: 04_仲裁文书/仲裁协议
+  rename_pattern: 仲裁协议
+  scenario: 仲裁
+- keywords:
+  - 仲裁申请书
+  - 仲裁请求书
+  - request for arbitration
+  - notice of arbitration
+  - 仲裁申请
+  - 申请仲裁
+  title_keywords:
+  - 仲裁申请书
+  - 仲裁请求书
+  - Request for Arbitration
+  - Notice of Arbitration
+  target: 04_仲裁文书/仲裁申请书
+  rename_pattern: 仲裁申请书
+  scenario: 仲裁
+- keywords:
+  - 仲裁答辩书
+  - 仲裁答辩意见
+  - statement of defense
+  - respondent's statement
+  - 仲裁答辩
+  title_keywords:
+  - 仲裁答辩书
+  - Statement of Defense
+  target: 04_仲裁文书/仲裁答辩书
+  rename_pattern: 仲裁答辩书
+  scenario: 仲裁
+- keywords:
+  - 仲裁反请求申请书
+  - 仲裁反请求
+  - 仲裁反诉
+  - counterclaim in arbitration
+  - counter-claim
+  title_keywords:
+  - 仲裁反请求申请书
+  - Counter-Claim
+  target: 04_仲裁文书/仲裁反请求
+  rename_pattern: 仲裁反请求
+  scenario: 仲裁
+- keywords:
+  - statement of claim
+  - claimant's memorial
+  - 申请人陈述书
+  - 申请人备忘录
+  title_keywords:
+  - Statement of Claim
+  - Claimant's Memorial
+  target: 04_仲裁文书/仲裁申请书
+  rename_pattern: Statement of Claim
+  scenario: 仲裁
+- keywords:
+  - counter-memorial
+  - 被申请人陈述书
+  - 被申请人备忘录
+  title_keywords:
+  - Counter-Memorial
+  - Respondent's Memorial
+  target: 04_仲裁文书/仲裁答辩书
+  rename_pattern: Counter-Memorial
+  scenario: 仲裁
+- keywords:
+  - reply memorial
+  - reply on merits
+  - 申请人回复
+  - 申请人再答辩
+  title_keywords:
+  - Reply Memorial
+  - Reply on Merits
+  target: 04_仲裁文书/代理词与陈述
+  rename_pattern: Reply Memorial
+  scenario: 仲裁
+- keywords:
+  - rejoinder
+  - rejoinder memorial
+  - 被申请人再答辩
+  title_keywords:
+  - Rejoinder
+  - Rejoinder Memorial
+  target: 04_仲裁文书/代理词与陈述
+  rename_pattern: Rejoinder
+  scenario: 仲裁
+- keywords:
+  - 临时措施申请书
+  - 紧急仲裁员申请
+  - emergency arbitrator
+  - interim measures
+  - 保全措施申请
+  title_keywords:
+  - 临时措施申请书
+  - Interim Measures Application
+  - Emergency Arbitration Request
+  target: 04_仲裁文书/临时措施申请
+  rename_pattern: 临时措施申请书
+  scenario: 仲裁
+- keywords:
+  - 程序申请
+  - procedural application
+  - 仲裁程序申请
+  - 文件生产申请
+  - document production request
+  - 仲裁管辖权异议
+  - jurisdictional objection in arbitration
+  title_keywords:
+  - Procedural Application
+  - Document Production Request
+  target: 04_仲裁文书/程序申请
+  rename_pattern: 程序申请
+  scenario: 仲裁
+- keywords:
+  - 仲裁通知
+  - 组庭通知
+  - 仲裁庭组成通知
+  - 程序令
+  - procedural order
+  - terms of reference
+  - 授权条款
+  - 仲裁员信息披露
+  - arbitrator declaration
+  - 仲裁受理通知
+  - 仲裁费用通知
+  - 仲裁费通知
+  - CIETAC
+  - BAC
+  - SHIAC
+  - SIAC
+  - ICC
+  - HKIAC
+  - LCIA
+  - ICDR
+  - ICSID
+  - 中国国际经济贸易仲裁委员会
+  - 北京仲裁委
+  - 上海国际仲裁中心
+  - 上仲
+  title_keywords:
+  - 仲裁通知
+  - 组庭通知
+  - Procedural Order
+  - Terms of Reference
+  target: 04_仲裁文书/仲裁机构函件
+  rename_pattern: 仲裁机构函件
+  scenario: 仲裁
+- keywords:
+  - 仲裁裁决书
+  - 部分裁决书
+  - 终局裁决书
+  - 同意裁决书
+  - final award
+  - partial award
+  - consent award
+  - interim award
+  - 仲裁裁决
+  - arbitral award
+  title_keywords:
+  - 仲裁裁决书
+  - 部分裁决书
+  - 终局裁决书
+  - Final Award
+  - Partial Award
+  - Consent Award
+  target: 08_裁决与执行/仲裁裁决书
+  rename_pattern: 仲裁裁决书
+  scenario: 仲裁
+- keywords:
+  - 撤裁申请书
+  - 撤销仲裁裁决
+  - set aside award
+  - 申请撤销仲裁裁决
+  title_keywords:
+  - 撤裁申请书
+  - 撤销仲裁裁决申请书
+  target: 08_裁决与执行/撤裁申请
+  rename_pattern: 撤裁申请书
+  scenario: 仲裁
+- keywords:
+  - 承认执行仲裁裁决申请书
+  - 申请承认执行
+  - 承认仲裁裁决
+  - recognition and enforcement
+  - enforce arbitral award
+  - 纽约公约
+  - New York Convention
+  title_keywords:
+  - 承认执行仲裁裁决申请书
+  - Recognition and Enforcement Application
+  target: 08_裁决与执行/承认执行申请
+  rename_pattern: 承认执行申请书
+  scenario: 仲裁
+- keywords:
+  - 刑事报案书
+  - 刑事控告书
+  - 控告书
+  - 举报书
+  - 举报信
+  - 报案证明
+  - 犯罪报案
+  - 控告状
+  title_keywords:
+  - 刑事报案书
+  - 刑事控告书
+  - 控告书
+  - 举报书
+  target: CR_侦查阶段/报案控告材料
+  rename_pattern: 刑事报案书
+  scenario: 中国刑事
+- keywords:
+  - 立案决定书
+  - 不予立案通知书
+  - 立案告知书
+  - case opening decision
+  - decision to file
+  title_keywords:
+  - 立案决定书
+  - 不予立案通知书
+  - 立案告知书
+  target: CR_侦查阶段/立案文件
+  rename_pattern: 立案文件
+  scenario: 中国刑事
+- keywords:
+  - 拘留通知书
+  - 逮捕通知书
+  - 逮捕决定书
+  - 逮捕证
+  - 羁押通知书
+  - 取保候审通知书
+  title_keywords:
+  - 拘留通知书
+  - 逮捕通知书
+  - 逮捕决定书
+  - 逮捕证
+  target: CR_侦查阶段/强制措施
+  rename_pattern: 强制措施文书
+  scenario: 中国刑事
+- keywords:
+  - 取保候审申请书
+  - 申请取保候审
+  - 取保候审决定书
+  - 羁押必要性审查申请书
+  - 变更强制措施申请书
+  - bail application
+  - 申请解除羁押
+  title_keywords:
+  - 取保候审申请书
+  - 取保候审决定书
+  - 羁押必要性审查申请书
+  - 变更强制措施申请书
+  target: CR_侦查阶段/取保候审
+  rename_pattern: 取保候审申请书
+  scenario: 中国刑事
+- keywords:
+  - 搜查令
+  - 搜查证
+  - 扣押通知书
+  - 扣押决定书
+  - 冻结通知书
+  - 冻结决定书
+  - 搜查笔录
+  - 扣押物品清单
+  - 查封扣押
+  title_keywords:
+  - 搜查令
+  - 搜查证
+  - 扣押通知书
+  - 冻结通知书
+  - 扣押物品清单
+  target: CR_侦查阶段/搜查扣押冻结
+  rename_pattern: 搜查扣押文书
+  scenario: 中国刑事
+- keywords:
+  - 讯问笔录
+  - 询问笔录
+  - 证人证言笔录
+  - 现场勘验笔录
+  - 辨认笔录
+  - 辨认结果
+  - 侦查笔录
+  title_keywords:
+  - 讯问笔录
+  - 询问笔录
+  - 证人证言笔录
+  - 现场勘验笔录
+  - 辨认笔录
+  target: CR_侦查阶段/侦查笔录
+  rename_pattern: 侦查笔录
+  scenario: 中国刑事
+- keywords:
+  - 阅卷申请书
+  - 阅卷笔录
+  - 案卷材料
+  - 阅卷
+  - 查阅案卷
+  - 案卷复制
+  title_keywords:
+  - 阅卷申请书
+  - 阅卷笔录
+  target: CR_侦查阶段/阅卷材料
+  rename_pattern: 阅卷材料
+  scenario: 中国刑事
+- keywords:
+  - 退补侦查意见书
+  - 退回补充侦查
+  - 退补侦查
+  - 补充侦查通知书
+  title_keywords:
+  - 退补侦查意见书
+  - 退回补充侦查意见书
+  target: CR_侦查阶段/退补侦查意见
+  rename_pattern: 退补侦查意见书
+  scenario: 中国刑事
+- keywords:
+  - 起诉书
+  - 公诉书
+  - 补充起诉书
+  - 变更起诉书
+  - indictment
+  - 刑事起诉书
+  title_keywords:
+  - 起诉书
+  - 公诉书
+  - 补充起诉书
+  - 变更起诉书
+  target: CR_审查起诉阶段/起诉书
+  rename_pattern: 起诉书
+  scenario: 中国刑事
+- keywords:
+  - 不起诉决定书
+  - 不起诉
+  - 相对不起诉
+  - 绝对不起诉
+  - 存疑不起诉
+  - 附条件不起诉
+  - non-prosecution decision
+  - decision not to prosecute
+  title_keywords:
+  - 不起诉决定书
+  - 附条件不起诉决定书
+  target: CR_审查起诉阶段/不起诉材料
+  rename_pattern: 不起诉决定书
+  scenario: 中国刑事
+- keywords:
+  - 审查起诉阶段辩护意见书
+  - 不捕不诉申请书
+  - 申请不批准逮捕意见书
+  - 作无罪处理意见书
+  - 申请变更罪名意见书
+  title_keywords:
+  - 不捕不诉申请书
+  - 无罪处理意见书
+  - 审查起诉阶段辩护意见书
+  target: CR_审查起诉阶段/辩护申请
+  rename_pattern: 审查起诉阶段辩护意见书
+  scenario: 中国刑事
+- keywords:
+  - 非法证据排除申请书
+  - 非法证据排除
+  - exclusion of illegally obtained evidence
+  - 刑讯逼供
+  - 非法取证
+  - 排除非法证据
+  title_keywords:
+  - 非法证据排除申请书
+  - 排除非法证据申请书
+  target: CR_审判阶段/非法证据排除申请
+  rename_pattern: 非法证据排除申请书
+  scenario: 中国刑事
+- keywords:
+  - 辩护词
+  - 辩护意见书
+  - 无罪辩护意见书
+  - 罪轻辩护
+  - defense brief
+  - closing argument defense
+  - 法庭辩护词
+  title_keywords:
+  - 辩护词
+  - 辩护意见书
+  - 无罪辩护意见书
+  target: CR_审判阶段/辩护词
+  rename_pattern: 辩护词
+  scenario: 中国刑事
+- keywords:
+  - 量刑意见书
+  - 量刑建议
+  - 量刑意见
+  - 从轻处罚意见
+  - sentencing opinion
+  - sentencing recommendation
+  title_keywords:
+  - 量刑意见书
+  - 量刑建议书
+  target: CR_审判阶段/量刑意见
+  rename_pattern: 量刑意见书
+  scenario: 中国刑事
+- keywords:
+  - 刑事附带民事起诉状
+  - 附带民事起诉
+  - 附带民事诉讼
+  - incidental civil action
+  - 刑事附带民事答辩状
+  title_keywords:
+  - 刑事附带民事起诉状
+  - 刑事附带民事答辩状
+  target: CR_审判阶段/附带民事诉讼
+  rename_pattern: 附带民事诉讼文书
+  scenario: 中国刑事
+- keywords:
+  - 刑事上诉状
+  - 刑事抗诉书
+  - criminal appeal
+  - 刑事申诉书
+  - 刑事申诉
+  - 申诉状
+  title_keywords:
+  - 刑事上诉状
+  - 刑事抗诉书
+  - 刑事申诉书
+  - 申诉书
+  target: CR_上诉申诉
+  rename_pattern: 刑事上诉申诉文书
+  scenario: 中国刑事
+- keywords:
+  - 减刑申请书
+  - 假释申请书
+  - 暂予监外执行申请书
+  - 减刑假释
+  - sentence reduction
+  - parole application
+  title_keywords:
+  - 减刑申请书
+  - 假释申请书
+  - 暂予监外执行申请书
+  target: CR_执行阶段/减刑假释申请
+  rename_pattern: 减刑假释申请书
+  scenario: 中国刑事
+- keywords:
+  - complaint
+  - civil complaint
+  - initial complaint
+  - plaintiff alleges
+  - causes of action
+  - class action complaint
+  - defendant's complaint
+  - 被告起诉
+  title_keywords:
+  - Complaint (Opposing)
+  - Defendant's Complaint
+  - Plaintiff's Complaint Against
+  target: 03_Opposing Party Filings/Pleadings/Complaint
+  rename_pattern: Complaint (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - defendant's answer
+  - answer to complaint
+  - affirmative defenses
+  - defendant admits
+  - defendant denies
+  - respondent's answer
+  title_keywords:
+  - Defendant's Answer
+  - Answer and Affirmative Defenses
+  - Answer to Complaint
+  target: 03_Opposing Party Filings/Pleadings/Answer
+  rename_pattern: Answer (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - defendant's counterclaim
+  - opposing counterclaim
+  - crossclaim
+  - third-party complaint
+  - third-party defendant
+  - counterclaim against plaintiff
+  title_keywords:
+  - Counterclaim
+  - Cross-Claim
+  - Third-Party Complaint
+  target: 03_Opposing Party Filings/Pleadings/Counterclaim
+  rename_pattern: Counterclaim (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - first amended complaint
+  - second amended complaint
+  - amended complaint
+  - supplemental complaint
+  - amended pleading
+  title_keywords:
+  - First Amended Complaint
+  - Second Amended Complaint
+  - Amended Complaint
+  target: 03_Opposing Party Filings/Pleadings/Amended Pleading
+  rename_pattern: Amended Pleading (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - defendant's notice of motion
+  - defendant's motion to dismiss
+  - defendant's motion for summary judgment
+  - defendant's declaration in support
+  - opposing notice of motion
+  - plaintiff's notice of motion
+  - plaintiff's motion
+  title_keywords:
+  - Defendant's Notice of Motion
+  - Plaintiff's Notice of Motion
+  - Opposing Motion
+  - Motion
+  target: 03_Opposing Party Filings/Motions & Briefs/Motion Papers
+  rename_pattern: Motion Papers (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - opposing memorandum of law
+  - opposing brief in support
+  - defendant's memorandum
+  - plaintiff's memorandum of law
+  - points and authorities (opposing)
+  title_keywords:
+  - Defendant's Memorandum
+  - Plaintiff's Memorandum of Law
+  - Points and Authorities
+  target: 03_Opposing Party Filings/Motions & Briefs/Memorandum in Support
+  rename_pattern: Memorandum in Support (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - opposing party's opposition
+  - defendant's opposition
+  - plaintiff's opposition
+  - opposing response to motion
+  - opposing memorandum in opposition
+  title_keywords:
+  - Defendant's Opposition
+  - Plaintiff's Opposition
+  - Memorandum in Opposition
+  - Response to Motion
+  target: 03_Opposing Party Filings/Motions & Briefs/Opposition Brief
+  rename_pattern: Opposition Brief (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - opposing reply brief
+  - defendant's reply
+  - plaintiff's reply
+  - opposing reply in support
+  - opposing reply memorandum
+  title_keywords:
+  - Defendant's Reply
+  - Plaintiff's Reply Brief
+  - Reply in Support (Opposing)
+  target: 03_Opposing Party Filings/Motions & Briefs/Reply Brief
+  rename_pattern: Reply Brief (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - opposing initial disclosures
+  - defendant's initial disclosures
+  - plaintiff's initial disclosures
+  - opposing rule 26(a)(1)
+  - opposing disclosure statement
+  title_keywords:
+  - Defendant's Initial Disclosures
+  - Plaintiff's Initial Disclosures
+  target: 03_Opposing Party Filings/Discovery Responses/Initial Disclosures
+  rename_pattern: Initial Disclosures (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - opposing responses to interrogatories
+  - defendant's interrogatory responses
+  - plaintiff's answers to interrogatories
+  - objections to interrogatories (opposing)
+  title_keywords:
+  - Defendant's Responses to Interrogatories
+  - Plaintiff's Answers to Interrogatories
+  target: 03_Opposing Party Filings/Discovery Responses/Interrogatory Responses
+  rename_pattern: Interrogatory Responses (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - opposing RFP responses
+  - defendant's responses to requests for production
+  - plaintiff's RFP responses
+  - opposing production
+  - bates (opposing)
+  title_keywords:
+  - Defendant's Responses to Requests for Production
+  - Plaintiff's RFP Responses
+  target: 03_Opposing Party Filings/Discovery Responses/RFP Responses
+  rename_pattern: RFP Responses (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - opposing RFA responses
+  - defendant's responses to requests for admission
+  - plaintiff's RFA responses
+  - opposing admits
+  - opposing denies
+  title_keywords:
+  - Defendant's Responses to Requests for Admission
+  - Plaintiff's RFA Responses
+  target: 03_Opposing Party Filings/Discovery Responses/RFA Responses
+  rename_pattern: RFA Responses (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - opposing privilege log
+  - defendant's privilege log
+  - plaintiff's privilege log
+  - opposing withheld documents
+  - adverse party privilege log
+  title_keywords:
+  - Defendant's Privilege Log
+  - Plaintiff's Privilege Log
+  target: 03_Opposing Party Filings/Discovery Responses/Privilege Log
+  rename_pattern: Privilege Log (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - opposing pretrial memorandum
+  - defendant's trial brief
+  - plaintiff's trial brief
+  - opposing joint pretrial order
+  - pretrial brief (opposing)
+  title_keywords:
+  - Defendant's Trial Brief
+  - Plaintiff's Trial Brief
+  - Opposing Pretrial Memorandum
+  target: 03_Opposing Party Filings/Pretrial Submissions/Pretrial Memorandum
+  rename_pattern: Trial Brief (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - opposing exhibit list
+  - defendant's exhibits
+  - plaintiff's exhibits
+  - opposing trial exhibits
+  - exhibit schedule (opposing)
+  title_keywords:
+  - Defendant's Exhibit List
+  - Plaintiff's Exhibit List
+  target: 03_Opposing Party Filings/Pretrial Submissions/Exhibit List
+  rename_pattern: Exhibit List (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - filed exhibit
+  - exhibit attachment
+  - attachment to motion
+  - attachment to pleading
+  - documentary exhibit
+  title_keywords:
+  - Exhibit
+  - Filed Exhibit
+  - Attachment
+  target: 03_Opposing Party Filings/Pretrial Submissions/Filed Exhibits & Attachments
+  rename_pattern: Filed Exhibit (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - opposing witness list
+  - defendant's witnesses
+  - plaintiff's witnesses
+  - opposing trial witnesses
+  - opposing will call
+  title_keywords:
+  - Defendant's Witness List
+  - Plaintiff's Witness List
+  target: 03_Opposing Party Filings/Pretrial Submissions/Witness List
+  rename_pattern: Witness List (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - opposing motion in limine
+  - defendant's motion in limine
+  - plaintiff's motion in limine
+  - opposing motion to exclude
+  - opposing motion to preclude
+  title_keywords:
+  - Defendant's Motion in Limine
+  - Plaintiff's Motion in Limine
+  target: 03_Opposing Party Filings/Pretrial Submissions/Motions in Limine
+  rename_pattern: Motion in Limine (Opposing)
+  source: opposing
+  scenario: 美国民事
+- keywords:
+  - our complaint
+  - complaint (our)
+  - verified complaint
+  - we allege
+  - plaintiff's complaint
+  title_keywords:
+  - Complaint
+  - Civil Complaint
+  - Verified Complaint
+  target: 04_Our Filings/Pleadings/Complaint
+  rename_pattern: Complaint
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - our answer
+  - answer (our)
+  - our affirmative defenses
+  - we deny
+  - our response to complaint
+  title_keywords:
+  - Answer
+  - Our Answer
+  - Answer and Affirmative Defenses
+  target: 04_Our Filings/Pleadings/Answer
+  rename_pattern: Answer
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - our counterclaim
+  - our crossclaim
+  - counterclaim (our)
+  - our third-party complaint
+  title_keywords:
+  - Our Counterclaim
+  - Counterclaim (Our)
+  target: 04_Our Filings/Pleadings/Counterclaim
+  rename_pattern: Counterclaim
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - our amended complaint
+  - our amended pleading
+  - amended complaint (our)
+  - first amended (our)
+  - second amended (our)
+  title_keywords:
+  - First Amended Complaint
+  - Second Amended Complaint
+  - Amended Complaint (Our)
+  target: 04_Our Filings/Pleadings/Amended Pleading
+  rename_pattern: Amended Pleading
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - notice of motion
+  - motion to dismiss
+  - 12(b)(6)
+  - rule 12
+  - MTD
+  - motion for summary judgment
+  - MSJ
+  - summary judgment
+  - rule 56
+  - motion to compel
+  - motion for injunctive relief
+  - motion for sanctions
+  - motion for leave
+  - motion to bifurcate
+  - motion to consolidate
+  - motion for extension
+  - motion to seal
+  - TRO
+  - temporary restraining order
+  - preliminary injunction
+  - ex parte
+  - declaration in support
+  - affidavit in support
+  title_keywords:
+  - Notice of Motion
+  - Motion to Dismiss
+  - Motion for Summary Judgment
+  - Motion to Compel
+  - Motion for Injunctive Relief
+  - Temporary Restraining Order
+  - TRO
+  - Motion
+  target: 04_Our Filings/Motions & Briefs/Motion Papers
+  rename_pattern: Motion Papers
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - memorandum of law in support
+  - brief in support
+  - points and authorities
+  - supporting memorandum
+  - memorandum in support of motion
+  title_keywords:
+  - Memorandum of Law in Support
+  - Brief in Support
+  - Points and Authorities
+  target: 04_Our Filings/Motions & Briefs/Memorandum in Support
+  rename_pattern: Memorandum in Support
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - opposition to motion
+  - response to motion
+  - memorandum in opposition
+  - brief in opposition
+  - our opposition
+  title_keywords:
+  - Opposition to
+  - Response to Motion
+  - Memorandum in Opposition
+  - Brief in Opposition
+  target: 04_Our Filings/Motions & Briefs/Opposition Brief
+  rename_pattern: Opposition Brief
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - reply brief
+  - reply in support
+  - reply memorandum
+  - reply to opposition
+  - movant's reply
+  title_keywords:
+  - Reply Brief
+  - Reply in Support
+  - Reply Memorandum
+  target: 04_Our Filings/Motions & Briefs/Reply Brief
+  rename_pattern: Reply Brief
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - initial disclosures
+  - rule 26(a)(1)
+  - 26a1 disclosures
+  - automatic disclosures
+  - our initial disclosures
+  title_keywords:
+  - Initial Disclosures
+  - Rule 26(a)(1) Disclosures
+  target: 04_Our Filings/Discovery — Sent/Initial Disclosures
+  rename_pattern: Initial Disclosures
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - interrogatories
+  - rogs
+  - first set of interrogatories
+  - special interrogatories
+  - form interrogatories
+  - please answer the following interrogatories
+  title_keywords:
+  - Interrogatories
+  - First Set of Interrogatories
+  target: 04_Our Filings/Discovery — Sent/Interrogatories
+  rename_pattern: Interrogatories
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - requests for production
+  - request for production of documents
+  - RFP
+  - document request
+  - produce all documents
+  - please produce
+  title_keywords:
+  - Requests for Production
+  - Request for Production of Documents
+  target: 04_Our Filings/Discovery — Sent/Requests for Production (RFPs)
+  rename_pattern: Requests for Production
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - requests for admission
+  - RFA
+  - admit or deny
+  - admit that
+  - please admit
+  title_keywords:
+  - Requests for Admission
+  target: 04_Our Filings/Discovery — Sent/Requests for Admission (RFAs)
+  rename_pattern: Requests for Admission
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - our responses to interrogatories
+  - our answers to interrogatories
+  - responses to interrogatories (our)
+  title_keywords:
+  - Our Responses to Interrogatories
+  - Responses to Interrogatories
+  target: 04_Our Filings/Discovery — Responses/Interrogatory Responses
+  rename_pattern: Interrogatory Responses
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - our responses to requests for production
+  - our RFP responses
+  - our production
+  - our bates
+  title_keywords:
+  - Our Responses to Requests for Production
+  - Our RFP Responses
+  target: 04_Our Filings/Discovery — Responses/RFP Responses
+  rename_pattern: RFP Responses
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - our responses to requests for admission
+  - our RFA responses
+  - our admissions
+  title_keywords:
+  - Our Responses to Requests for Admission
+  - Our RFA Responses
+  target: 04_Our Filings/Discovery — Responses/RFA Responses
+  rename_pattern: RFA Responses
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - our privilege log
+  - privilege log (our)
+  - our withheld documents
+  - attorney-client privilege log
+  - work product log
+  title_keywords:
+  - Our Privilege Log
+  - Privilege Log
+  target: 04_Our Filings/Discovery — Responses/Privilege Log
+  rename_pattern: Privilege Log
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - trial brief
+  - pretrial brief
+  - pretrial memorandum
+  - joint pretrial order
+  - pretrial conference order
+  - our trial brief
+  title_keywords:
+  - Trial Brief
+  - Pretrial Brief
+  - Pretrial Memorandum
+  target: 04_Our Filings/Pretrial Submissions/Pretrial Memorandum
+  rename_pattern: Trial Brief
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - exhibit list
+  - our exhibit list
+  - our exhibits
+  - exhibit index
+  - our trial exhibits
+  title_keywords:
+  - Exhibit List
+  - Our Exhibit List
+  target: 04_Our Filings/Pretrial Submissions/Exhibit List
+  rename_pattern: Exhibit List
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - filed exhibit
+  - exhibit attachment
+  - attachment to motion
+  - attachment to pleading
+  - documentary exhibit
+  title_keywords:
+  - Exhibit
+  - Filed Exhibit
+  - Attachment
+  target: 04_Our Filings/Pretrial Submissions/Filed Exhibits & Attachments
+  rename_pattern: Filed Exhibit
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - witness list
+  - our witnesses
+  - may call witnesses
+  - will call witnesses
+  - our trial witnesses
+  title_keywords:
+  - Witness List
+  - Our Witness List
+  target: 04_Our Filings/Pretrial Submissions/Witness List
+  rename_pattern: Witness List
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - motion in limine
+  - our motion in limine
+  - motion to exclude
+  - motion to preclude
+  - daubert motion
+  - our in limine
+  title_keywords:
+  - Motion in Limine
+  - Daubert Motion
+  target: 04_Our Filings/Pretrial Submissions/Motions in Limine
+  rename_pattern: Motion in Limine
+  source: ours
+  scenario: 美国民事
+- keywords:
+  - legal hold
+  - litigation hold
+  - preserve all documents
+  - do not destroy
+  - hold notice
+  - document preservation notice
+  title_keywords:
+  - Legal Hold Notice
+  - Litigation Hold
+  - Document Preservation Notice
+  target: 05_Discovery & Doc Review/Legal Hold/Hold Notice
+  rename_pattern: Legal Hold Notice
+  scenario: 美国民事
+- keywords:
+  - custodian acknowledgment
+  - hold acknowledgment
+  - hold confirmation
+  - received and understand (hold)
+  title_keywords:
+  - Custodian Acknowledgment
+  - Hold Acknowledgment
+  target: 05_Discovery & Doc Review/Legal Hold/Custodian Acknowledgment
+  rename_pattern: Custodian Acknowledgment
+  scenario: 美国民事
+- keywords:
+  - collection log
+  - ESI collection
+  - data collection report
+  - forensic collection
+  - collection report
+  title_keywords:
+  - Collection Log
+  - ESI Collection Report
+  target: 05_Discovery & Doc Review/Document Collection/Collection Log
+  rename_pattern: Collection Log
+  scenario: 美国民事
+- keywords:
+  - review protocol
+  - coding manual
+  - review guidelines
+  - responsiveness criteria
+  - document review protocol
+  title_keywords:
+  - Review Protocol
+  - Coding Manual
+  - Document Review Protocol
+  target: 05_Discovery & Doc Review/Document Review/Review Protocol
+  rename_pattern: Review Protocol
+  scenario: 美国民事
+- keywords:
+  - master privilege log
+  - privilege log (master)
+  - withheld documents log
+  - basis for withholding
+  - attorney-client master log
+  title_keywords:
+  - Master Privilege Log
+  - Privilege Log (Master)
+  target: 05_Discovery & Doc Review/Document Review/Privilege Log (Master)
+  rename_pattern: Master Privilege Log
+  scenario: 美国民事
+- keywords:
+  - hot documents
+  - hot docs
+  - key documents
+  - smoking gun
+  - critical evidence
+  - hot document list
+  title_keywords:
+  - Hot Documents
+  - Key Documents
+  target: 05_Discovery & Doc Review/Document Review/Hot Documents
+  rename_pattern: Hot Documents
+  scenario: 美国民事
+- keywords:
+  - notice of deposition
+  - deposition notice
+  - notice to take deposition
+  - rule 30
+  - 30(b)(6)
+  - deposition subpoena
+  - subpoena
+  - subpoena duces tecum
+  - subpoena ad testificandum
+  - third-party subpoena
+  title_keywords:
+  - Notice of Deposition
+  - Deposition Notice
+  - Subpoena
+  - Subpoena Duces Tecum
+  target: 05_Discovery & Doc Review/Depositions/Notice of Deposition
+  rename_pattern: Notice of Deposition
+  scenario: 美国民事
+- keywords:
+  - deposition outline
+  - depo outline
+  - deposition prep
+  - examination outline
+  - deposition questions
+  - deposition preparation notes
+  title_keywords:
+  - Deposition Outline
+  - Deposition Prep
+  target: 05_Discovery & Doc Review/Depositions/Deposition Outline
+  rename_pattern: Deposition Outline
+  scenario: 美国民事
+- keywords:
+  - deposition transcript
+  - transcript of deposition
+  - court reporter transcript
+  - errata sheet
+  - deposition of
+  - rough transcript
+  - certified transcript
+  title_keywords:
+  - Deposition Transcript
+  - Transcript of Deposition
+  - Errata Sheet
+  target: 05_Discovery & Doc Review/Depositions/Deposition Transcript
+  rename_pattern: Deposition Transcript
+  scenario: 美国民事
+- keywords:
+  - deposition summary
+  - depo summary
+  - transcript summary
+  - key testimony
+  - summary of deposition
+  title_keywords:
+  - Deposition Summary
+  - Transcript Summary
+  target: 05_Discovery & Doc Review/Depositions/Deposition Summary
+  rename_pattern: Deposition Summary
+  scenario: 美国民事
+- keywords:
+  - expert report
+  - opening expert report
+  - initial expert report
+  - affirmative expert report
+  - report of (our expert)
+  - 专家报告
+  - 专家意见书
+  title_keywords:
+  - Expert Report
+  - Opening Expert Report
+  - Initial Expert Report
+  target: 06_Experts/Our Experts/Expert Report
+  rename_pattern: Expert Report
+  scenario: 美国民事
+- keywords:
+  - rebuttal expert report
+  - rebuttal report
+  - reply report
+  - our rebuttal
+  - responsive expert report
+  - sur-rebuttal
+  title_keywords:
+  - Rebuttal Expert Report
+  - Rebuttal Report
+  - Reply Expert Report
+  target: 06_Experts/Our Experts/Rebuttal Report
+  rename_pattern: Rebuttal Expert Report
+  scenario: 美国民事
+- keywords:
+  - expert disclosure
+  - rule 26(a)(2)
+  - FRCP 26(a)(2)
+  - expert witness disclosure
+  - curriculum vitae
+  - expert qualifications
+  - prior testimony
+  title_keywords:
+  - Expert Disclosure
+  - Rule 26(a)(2) Disclosure
+  - Expert CV
+  target: 06_Experts/Our Experts/Qualifications & CV
+  rename_pattern: Expert Disclosure
+  scenario: 美国民事
+- keywords:
+  - expert deposition transcript (our)
+  - our expert deposition
+  - deposition of our expert
+  title_keywords:
+  - Our Expert Deposition
+  - Expert Deposition Transcript
+  target: 06_Experts/Our Experts/Expert Deposition Transcript
+  rename_pattern: Expert Deposition Transcript
+  scenario: 美国民事
+- keywords:
+  - opposing expert report
+  - adverse expert report
+  - defendant's expert report
+  - plaintiff's expert report
+  - report of (opposing expert)
+  title_keywords:
+  - Opposing Expert Report
+  - Adverse Expert Report
+  - Defendant's Expert Report
+  - Plaintiff's Expert Report
+  target: 06_Experts/Opposing Experts/Expert Report
+  rename_pattern: Expert Report (Opposing)
+  scenario: 美国民事
+- keywords:
+  - opposing rebuttal report
+  - adverse rebuttal report
+  - opposing reply report
+  title_keywords:
+  - Opposing Rebuttal Report
+  - Adverse Rebuttal Report
+  target: 06_Experts/Opposing Experts/Rebuttal Report
+  rename_pattern: Rebuttal Report (Opposing)
+  scenario: 美国民事
+- keywords:
+  - trial outline
+  - trial plan
+  - trial notebook
+  - trial preparation memo
+  - hearing outline
+  title_keywords:
+  - Trial Outline
+  - Trial Plan
+  - Trial Notebook
+  target: 07_Trial/Trial Preparation/Trial Outline
+  rename_pattern: Trial Outline
+  scenario: 美国民事
+- keywords:
+  - opening statement
+  - opening argument
+  - opening remarks
+  - ladies and gentlemen of the jury
+  title_keywords:
+  - Opening Statement
+  - Opening Argument
+  target: 07_Trial/Trial Preparation/Opening Statement
+  rename_pattern: Opening Statement
+  scenario: 美国民事
+- keywords:
+  - closing argument
+  - closing statement
+  - summation
+  - closing remarks
+  title_keywords:
+  - Closing Argument
+  - Closing Statement
+  - Summation
+  target: 07_Trial/Trial Preparation/Closing Argument
+  rename_pattern: Closing Argument
+  scenario: 美国民事
+- keywords:
+  - jury instructions
+  - proposed jury instructions
+  - jury charge
+  - verdict form
+  - special verdict
+  - model instructions
+  title_keywords:
+  - Jury Instructions
+  - Proposed Jury Instructions
+  - Jury Charge
+  - Verdict Form
+  target: 07_Trial/Trial Preparation/Jury Instructions
+  rename_pattern: Jury Instructions
+  scenario: 美国民事
+- keywords:
+  - trial demonstratives
+  - demonstrative exhibit
+  - timeline graphic
+  - visual aid
+  - trial presentation slides
+  - .pptx (trial)
+  title_keywords:
+  - Trial Demonstratives
+  - Demonstrative Exhibit
+  - Timeline Graphic
+  target: 07_Trial/Trial Preparation/Trial Demonstratives
+  rename_pattern: Trial Demonstratives
+  scenario: 美国民事
+- keywords:
+  - trial transcript
+  - transcript of trial
+  - day 1 transcript
+  - morning session transcript
+  - trial record
+  - hearing transcript
+  title_keywords:
+  - Trial Transcript
+  - Transcript of Trial
+  - Hearing Transcript
+  target: 07_Trial/Trial Record/Trial Transcript
+  rename_pattern: Trial Transcript
+  scenario: 美国民事
+- keywords:
+  - attorney trial notes
+  - trial notes
+  - hearing notes
+  - daily trial summary
+  title_keywords:
+  - Trial Notes
+  - Attorney Trial Notes
+  - Daily Trial Summary
+  target: 07_Trial/Trial Record/Attorney Trial Notes
+  rename_pattern: Trial Notes
+  scenario: 美国民事
+- keywords:
+  - summons
+  - civil summons
+  - you are hereby summoned
+  - proof of service
+  - certificate of service
+  - affidavit of service
+  - service of process
+  title_keywords:
+  - Summons
+  - Proof of Service
+  - Certificate of Service
+  target: 08_Court Documents/Summons & Service
+  rename_pattern: Summons / Proof of Service
+  scenario: 美国民事
+- keywords:
+  - notice of hearing
+  - conference notice
+  - hearing set for
+  - conference scheduled
+  - order to show cause
+  title_keywords:
+  - Notice of Hearing
+  - Conference Notice
+  target: 08_Court Documents/Hearing Notices
+  rename_pattern: Hearing Notice
+  scenario: 美国民事
+- keywords:
+  - case management order
+  - CMO
+  - scheduling order
+  - discovery cutoff
+  - expert disclosure deadline
+  - case management conference
+  - CMC
+  - rule 26(f) report
+  - pretrial scheduling
+  title_keywords:
+  - Case Management Order
+  - Scheduling Order
+  - CMO
+  target: 08_Court Documents/Case Management Order
+  rename_pattern: Case Management Order
+  scenario: 美国民事
+- keywords:
+  - court order
+  - order granting
+  - order denying
+  - it is hereby ordered
+  - minute order
+  - civil minutes
+  - standing order
+  - ruling
+  - so ordered
+  title_keywords:
+  - Court Order
+  - Order Granting
+  - Order Denying
+  - Minute Order
+  - Civil Minutes
+  - Standing Order
+  - Order
+  target: 08_Court Documents/Court Orders
+  rename_pattern: Court Order
+  scenario: 美国民事
+- keywords:
+  - final judgment
+  - judgment
+  - default judgment
+  - consent judgment
+  - entry of judgment
+  - it is adjudged
+  - judgment entered
+  - jury verdict
+  - special verdict
+  - general verdict
+  - verdict form
+  title_keywords:
+  - Final Judgment
+  - Default Judgment
+  - Judgment
+  - Jury Verdict
+  - Verdict Form
+  target: 08_Court Documents/Judgment
+  rename_pattern: Judgment
+  scenario: 美国民事
+- keywords:
+  - settlement demand
+  - settlement offer
+  - counter-offer
+  - without prejudice (settlement)
+  - mediation statement
+  - mediation brief
+  - mediation session
+  - mediator
+  - JAMS mediation
+  - ADR
+  - 调解陈述
+  title_keywords:
+  - Settlement Demand
+  - Settlement Offer
+  - Mediation Statement
+  - Mediation Brief
+  target: 09_Settlement/Settlement Negotiations
+  rename_pattern: Settlement Negotiation
+  scenario: 美国民事
+- keywords:
+  - settlement agreement
+  - confidential settlement agreement
+  - release
+  - in full settlement
+  - releases all claims
+  - waiver of claims
+  - general release
+  - mutual release
+  - full and final release
+  - 和解协议
+  - 美国和解
+  title_keywords:
+  - Settlement Agreement
+  - Confidential Settlement Agreement
+  - Mutual Release
+  - Full and Final Release
+  target: 09_Settlement/Settlement Agreement
+  rename_pattern: Settlement Agreement
+  scenario: 美国民事
+- keywords:
+  - stipulation of dismissal
+  - voluntary dismissal
+  - rule 41
+  - notice of dismissal
+  - with prejudice
+  - without prejudice (dismissal)
+  - joint stipulation of dismissal
+  title_keywords:
+  - Stipulation of Dismissal
+  - Voluntary Dismissal
+  - Notice of Dismissal
+  target: 09_Settlement/Dismissal Papers
+  rename_pattern: Stipulation of Dismissal
+  scenario: 美国民事
+- keywords:
+  - notice of appeal
+  - NOA
+  - FRAP
+  - hereby appeals
+  - appeals to the court of appeals
+  - circuit court appeal
+  - ninth circuit
+  - second circuit
+  - docketing statement
+  title_keywords:
+  - Notice of Appeal
+  - Notice of Cross-Appeal
+  - Docketing Statement
+  target: 10_Appeal/Notice of Appeal
+  rename_pattern: Notice of Appeal
+  scenario: 美国民事
+- keywords:
+  - appellant's brief
+  - appellant brief
+  - opening brief (appeal)
+  - opening appellate brief
+  - petitioner's brief
+  - statement of issues on appeal
+  title_keywords:
+  - Opening Brief
+  - Appellant's Brief
+  - Petitioner's Brief
+  target: 10_Appeal/Appellate Briefs/Appellant's Brief
+  rename_pattern: Opening Brief (Appeal)
+  scenario: 美国民事
+- keywords:
+  - appellee's brief
+  - appellee brief
+  - respondent's brief on appeal
+  - answering brief
+  - response brief (appeal)
+  title_keywords:
+  - Answering Brief
+  - Appellee's Brief
+  - Respondent's Brief
+  target: 10_Appeal/Appellate Briefs/Appellee's Brief
+  rename_pattern: Answering Brief (Appeal)
+  scenario: 美国民事
+- keywords:
+  - reply brief on appeal
+  - appellant's reply brief
+  - petitioner's reply brief
+  - appellate reply
+  title_keywords:
+  - Reply Brief on Appeal
+  - Appellant's Reply Brief
+  target: 10_Appeal/Appellate Briefs/Reply Brief
+  rename_pattern: Reply Brief (Appeal)
+  scenario: 美国民事
+- keywords:
+  - record on appeal
+  - joint appendix
+  - appendix on appeal
+  - lower court record
+  - record excerpts
+  title_keywords:
+  - Record on Appeal
+  - Joint Appendix
+  target: 10_Appeal/Record on Appeal
+  rename_pattern: Record on Appeal
+  scenario: 美国民事
+- keywords:
+  - oral argument outline
+  - bench memo (appeal)
+  - moot court
+  - panel questions
+  - argument outline (appeal)
+  title_keywords:
+  - Oral Argument Outline
+  - Bench Memo
+  target: 10_Appeal/Oral Argument Materials
+  rename_pattern: Oral Argument Materials
+  scenario: 美国民事
+- keywords:
+  - foreign counsel
+  - local counsel
+  - co-counsel
+  - international counsel correspondence
+  - foreign law opinion
+  - applicable law opinion
+  title_keywords:
+  - Foreign Counsel
+  - Local Counsel
+  - Foreign Law Opinion
+  target: 11_Cross-Border/Foreign Counsel Correspondence
+  rename_pattern: Foreign Counsel Correspondence
+  scenario: 美国民事
+- keywords:
+  - 中国法律
+  - PRC law
+  - Chinese law
+  - CIETAC
+  - China operations
+  - certified translation (US)
+  - translated by
+  title_keywords:
+  - China-Related Materials
+  - Certified Translation
+  target: 11_Cross-Border/China-Related Materials
+  rename_pattern: China-Related Materials
+  scenario: 美国民事
+- keywords:
+  - meeting minutes (client)
+  - call notes (client)
+  - attendees
+  - action items (meeting)
+  - conference notes (client)
+  title_keywords:
+  - Meeting Minutes
+  - Call Notes
+  - Conference Notes
+  target: 12_Client Communications/Meeting Minutes
+  rename_pattern: Meeting Minutes
+  scenario: 美国民事
+- keywords:
+  - status report
+  - litigation update
+  - case update
+  - monthly update
+  - progress report (client)
+  title_keywords:
+  - Status Report
+  - Litigation Update
+  - Case Update
+  target: 12_Client Communications/Status Reports
+  rename_pattern: Status Report
+  scenario: 美国民事
+- keywords:
+  - strategy memo to client
+  - case strategy (client)
+  - litigation strategy memo
+  - recommendation memo
+  - strategic assessment (client)
+  title_keywords:
+  - Strategy Memo
+  - Litigation Strategy
+  - Case Strategy Memo
+  target: 12_Client Communications/Strategy Memos to Client
+  rename_pattern: Strategy Memo to Client
+  scenario: 美国民事
+- keywords:
+  - time records
+  - billable hours
+  - timesheet
+  - time entry
+  - daily time (billing)
+  title_keywords:
+  - Time Records
+  - Timesheet
+  - Billable Hours
+  target: 13_Billing & Time/Time Records
+  rename_pattern: Time Records
+  scenario: 美国民事
+- keywords:
+  - expense report
+  - travel expenses
+  - reimbursement
+  - out-of-pocket
+  - travel receipt
+  title_keywords:
+  - Expense Report
+  - Travel Expenses
+  - Reimbursement
+  target: 13_Billing & Time/Expense Reports
+  rename_pattern: Expense Report
+  scenario: 美国民事
+- keywords:
+  - invoice
+  - bill
+  - statement of account
+  - total due
+  - remit payment
+  - fees due
+  title_keywords:
+  - Invoice
+  - Bill
+  - Statement of Account
+  target: 13_Billing & Time/Invoices
+  rename_pattern: Invoice
+  scenario: 美国民事
+- keywords:
+  - work log
+  - daily notes (internal)
+  - task list
+  - to do
+  - pending items
+  - work log (US)
+  title_keywords:
+  - Work Log
+  - Daily Notes
+  - Task List
+  target: 14_Internal Work Files/Work Log
+  rename_pattern: Work Log
+  scenario: 美国民事
+- keywords:
+  - internal strategy
+  - litigation plan
+  - case strategy (internal)
+  - work product memo
+  - internal strategy note
+  title_keywords:
+  - Internal Strategy
+  - Litigation Plan
+  - Case Strategy (Internal)
+  target: 14_Internal Work Files/Case Strategy
+  rename_pattern: Internal Case Strategy
+  scenario: 美国民事
+- keywords:
+  - document template
+  - form template
+  - boilerplate
+  - standard form
+  - .dotx
+  title_keywords:
+  - Template
+  - Form Template
+  target: 14_Internal Work Files/Templates & Forms
+  rename_pattern: Document Template
+  scenario: 美国民事
+- keywords:
+  - file closing checklist
+  - closing checklist (US)
+  - case closing
+  - file index (closing)
+  - closing memo
+  title_keywords:
+  - Closing Checklist
+  - Case Closing
+  - File Closing
+  target: 15_Case Closing/Internal Closing
+  rename_pattern: Closing Checklist
+  scenario: 美国民事
+- keywords:
+  - file transfer
+  - closing letter
+  - client file transfer
+  - transfer of files
+  - file return
+  title_keywords:
+  - File Transfer
+  - Closing Letter
+  - Client File Transfer
+  target: 15_Case Closing/Client File Transfer
+  rename_pattern: Closing Letter
+  scenario: 美国民事
+- keywords:
+  - 庭审提纲
+  - 开庭提纲
+  - 庭前方案
+  - trial outline
+  - 庭审准备
+  - 仲裁开庭提纲
+  - hearing outline
+  title_keywords:
+  - 庭审提纲
+  - 开庭提纲
+  - Hearing Outline
+  target: 05_庭审/庭前准备/庭审提纲
+  rename_pattern: 庭审提纲
+  scenario: 中国民事
+- keywords:
+  - 庭审笔录
+  - 开庭笔录
+  - 庭审记录
+  - 法庭辩论笔录
+  - 法庭调查笔录
+  - 仲裁开庭笔录
+  - 次开庭
+  - 开庭记录
+  - 开庭笔记
+  - 庭审手记
+  title_keywords:
+  - 庭审笔录
+  - 开庭笔录
+  - 法庭辩论笔录
+  - 法庭调查笔录
+  - 第一次开庭
+  - 第二次开庭
+  - 第三次开庭
+  target: 05_庭审/庭审记录/律师自记笔录
+  rename_pattern: 庭审笔录
+  scenario: 中国民事
+- keywords:
+  - PPT
+  - 幻灯片
+  - 演示文稿
+  - 示图
+  - 可视化
+  - 流程图
+  - 示意图
+  - 图示
+  - timeline chart
+  - 事实图表
+  target: 05_庭审/庭前准备/可视化材料
+  rename_pattern: 可视化材料
+  scenario: 中国民事
+- keywords:
+  - 开庭陈述
+  - 开庭声明
+  - opening statement
+  - 法庭陈述
+  - 庭审当庭陈述
+  title_keywords:
+  - 开庭陈述
+  - Opening Statement
+  target: 05_庭审/庭前准备/庭审提纲
+  rename_pattern: 开庭陈述
+  scenario: 中国民事
+- keywords:
+  - 关于鉴定意见书的异议
+  - 鉴定意见书异议
+  - 对鉴定意见书的异议
+  - 关于鉴定报告的异议
+  - 鉴定意见异议申请书
+  - 损失鉴定异议申请书
+  - 对损失鉴定的异议
+  - 鉴定书面意见
+  - 关于鉴定意见书的书面意见
+  - 对司法鉴定的异议
+  title_keywords:
+  - 鉴定意见书异议
+  - 对鉴定意见书的书面意见
+  - 关于鉴定意见书的异议
+  - 鉴定异议申请书
+  - 损失鉴定异议
+  - 意见书》的异议
+  - 报告》的异议
+  - 意见书的异议
+  - 鉴定活动的异议
+  - 意见书》的书面
+  - 报告》的书面意见
+  - 书面意见-签署
+  - 鉴定意见异议申请书
+  target: 04_诉讼文书/程序申请
+  rename_pattern: 鉴定意见异议申请书
+  scenario: 通用
+- keywords:
+  - 司法鉴定意见书
+  - 司法鉴定
+  - 鉴定意见书
+  - 鉴定报告
+  - 鉴定结论书
+  - judicial appraisal
+  - forensic report
+  title_keywords:
+  - 司法鉴定意见书
+  - 鉴定意见书
+  - 鉴定报告书
+  target: 06_专家工作/司法鉴定
+  rename_pattern: 司法鉴定意见书
+  scenario: 通用
+- keywords:
+  - 专家辅助人意见
+  - 专家意见书
+  - 专家报告
+  - 专家证词
+  - 专家意见
+  - 专家辅助人出庭意见
+  - 辅助人意见书
+  title_keywords:
+  - 专家意见书
+  - 专家辅助人意见书
+  - 专家报告
+  target: 06_专家工作/专家辅助人
+  rename_pattern: 专家意见书
+  scenario: 通用
+- keywords:
+  - 技术分析报告
+  - 技术鉴定
+  - 技术报告
+  - 技术分析
+  - 检测报告
+  - 检验报告
+  - 质检报告
+  - 实验报告
+  - 测试报告
+  - inspection report
+  - technical analysis report
+  - test report
+  - 标准对比分析
+  - 产品缺陷分析
+  - 失效分析
+  title_keywords:
+  - 技术分析报告
+  - 检测报告
+  - 检验报告
+  - 质检报告
+  - 测试报告
+  - 实验报告
+  - 鉴定报告
+  - Inspection Report
+  - Technical Analysis Report
+  - Test Report
+  - Failure Analysis Report
+  target: 06_专家工作/技术分析
+  rename_pattern: 技术分析报告
+  scenario: 通用
+- keywords:
+  - 调解申请书
+  - 申请人民调解
+  - 申请调解
+  - 调解申请
+  - 申请法院调解
+  - 调解申请表
+  title_keywords:
+  - 调解申请书
+  - 人民调解申请书
+  target: 07_和解与调解/调解申请
+  rename_pattern: 调解申请书
+  scenario: 通用
+- keywords:
+  - 和解协议
+  - 和解方案
+  - 调解协议
+  - 调解方案
+  - 和解备忘录
+  - 和解条款
+  - 和解谈判纪要
+  - 人民调解协议书
+  title_keywords:
+  - 和解协议
+  - 调解协议
+  - 和解方案
+  - 调解方案
+  - 和解条款
+  - 人民调解协议书
+  target: 07_和解与调解/和解方案
+  rename_pattern: 和解方案
+  scenario: 通用
+- keywords:
+  - 调解笔录
+  - 调解记录
+  - mediation transcript
+  - 调解过程记录
+  - 仲裁调解
+  - 调解终结通知
+  - 调解不成立证明
+  title_keywords:
+  - 调解笔录
+  - 调解记录
+  - 调解终结通知
+  target: 07_和解与调解/调解笔录
+  rename_pattern: 调解笔录
+  scenario: 通用
+- keywords:
+  - 刑事判决书
+  - 一审刑事判决书
+  - 二审刑事判决书
+  - 刑事裁定书
+  - criminal judgment
+  - criminal ruling
+  title_keywords:
+  - 刑事判决书
+  - 刑事裁定书
+  target: 08_判决与执行/判决书
+  rename_pattern: 刑事判决书
+  scenario: 中国刑事
+- scenario: 中国刑事
+  target: 10_会见与沟通/会见笔录
+  keywords:
+  - 会见笔录
+  - 律师会见
+  - 会见记录
+  - 会见犯罪嫌疑人
+  - 会见被告人
+  - 会见在押
+- scenario: 中国刑事
+  target: 10_会见与沟通/会见预约与批准
+  keywords:
+  - 会见预约
+  - 会见申请
+  - 安排会见
+  - 会见批准
+  - 预约会见
+- keywords:
+  - 一审民事判决书
+  - 二审民事判决书
+  - 民事判决书
+  - 行政判决书
+  - civil judgment
+  title_keywords:
+  - 民事判决书
+  - 行政判决书
+  target: 08_判决与执行/判决书
+  rename_pattern: 判决书
+  scenario: 中国民事
+- keywords:
+  - 上诉文件
+  - 上诉材料
+  - 二审材料
+  - appeal documents
+  target: 08_判决与执行/上诉文件
+  rename_pattern: 上诉文件
+  scenario: 中国民事
+- keywords:
+  - 翻译
+  - translate
+  - translation
+  - 译文
+  - 英文版
+  - 中译英
+  - 英译中
+  - English version
+  - certified translation
+  - 公证翻译
+  - 认证翻译
+  target: 09_跨境协作/翻译文件
+  rename_pattern: 翻译
+  scenario: 通用
+- keywords:
+  - 美国法院
+  - 加州
+  - California
+  - federal court
+  - district court
+  - USDC
+  - circuit court
+  - US court
+  - 美国诉讼
+  - American court
+  target: 09_跨境协作/境外诉讼仲裁/US
+  rename_pattern: 境外文件
+  scenario: 仲裁
+- keywords:
+  - 境外律师
+  - 外国律师
+  - local counsel
+  - foreign counsel
+  - overseas lawyer
+  - 境外法律意见书
+  target: 09_跨境协作/外国律师协作
+  rename_pattern: 境外律师协作
+  scenario: 通用
+- keywords:
+  - 法律意见书跨境版
+  - cross-border legal opinion
+  - 境外法律意见
+  title_keywords:
+  - 法律意见书
+  content_keywords:
+  - 境外
+  - 跨境
+  - overseas
+  - cross-border
+  - foreign law
+  target: 09_跨境协作/法律意见书跨境版
+  rename_pattern: 跨境法律意见书
+  scenario: 通用
+- keywords:
+  - 外国法证明
+  - 外国法律意见书
+  - foreign law opinion
+  - 外国法查明
+  - 法律确认函
+  - 法律证明书
+  - 外国法律状况证明
+  title_keywords:
+  - 外国法意见书
+  - Foreign Law Opinion
+  - 外国法证明
+  target: 09_跨境协作/外国法证明
+  rename_pattern: 外国法证明
+  scenario: 通用
+- keywords:
+  - 海牙送达公约
+  - 海牙取证公约
+  - 域外送达
+  - 域外取证
+  - letters rogatory
+  - letter of request
+  - central authority
+  - request for international judicial assistance
+  - 外国委托书
+  - 司法协助请求书
+  title_keywords:
+  - 海牙公约申请
+  - Letters Rogatory
+  - Letter of Request
+  - 司法协助请求书
+  target: 09_跨境协作/送达与司法协助
+  rename_pattern: 司法协助文件
+  scenario: 通用
+- keywords:
+  - 会议纪要
+  - 会议记录
+  - minutes
+  - meeting minutes
+  - 议事录
+  - 讨论纪要
+  - 座谈纪要
+  - 电话会议纪要
+  title_keywords:
+  - 会议纪要
+  - 会议记录
+  - 议事录
+  - 讨论纪要
+  target: 10_客户沟通/会议纪要
+  rename_pattern: 会议纪要
+  scenario: 通用
+- keywords:
+  - 阶段汇报
+  - 进展报告
+  - 进度汇报
+  - 月报
+  - 周报
+  - 工作汇报
+  - 案件汇报
+  - status report
+  - progress report
+  title_keywords:
+  - 阶段汇报
+  - 进展报告
+  - 工作汇报
+  - 月报
+  - 周报
+  target: 10_客户沟通/阶段汇报
+  rename_pattern: 阶段汇报
+  scenario: 通用
+- keywords:
+  - 邮件草稿
+  - 邮件草拟
+  - 拟发邮件
+  - 邮件初稿
+  - 待发邮件
+  - 回复邮件草稿
+  - draft email
+  - email draft
+  title_keywords:
+  - 邮件草稿
+  - 拟发邮件
+  - Draft Email
+  - Email Reply
+  - Reply Email
+  - email reply
+  target: 10_客户沟通/往来邮件/我方拟发
+  rename_pattern: 邮件
+  scenario: 通用
+- keywords:
+  - 邮件摘要
+  - 邮件整理
+  - email summary
+  - 往来邮件记录
+  target: 10_客户沟通/邮件摘要
+  rename_pattern: 邮件摘要
+  scenario: 通用
+- keywords:
+  - 风险提示
+  - 风险告知
+  - 风险提示函
+  - 风险预警
+  - 法律风险提示
+  - risk notice
+  - risk warning
+  title_keywords:
+  - 风险提示
+  - 风险告知函
+  - 风险说明
+  target: 10_客户沟通/风险提示
+  rename_pattern: 风险提示
+  scenario: 通用
+- keywords:
+  - 账单
+  - invoice
+  - 发票
+  - 增值税发票
+  - 专用发票
+  - 普通发票
+  - 形式发票
+  - 商业发票
+  - 付款通知
+  - 收款确认
+  - 结算单
+  - 对账单
+  title_keywords:
+  - 账单
+  - 发票
+  - 增值税发票
+  - 形式发票
+  - 商业发票
+  - 对账单
+  - 结算单
+  target: 11_账单与工时/账单记录
+  rename_pattern: 账单
+  scenario: 通用
+- keywords:
+  - 工时记录
+  - timesheet
+  - 计费记录
+  - 时间表
+  - 工时表
+  - billing record
+  title_keywords:
+  - 工时记录
+  - Timesheet
+  - 计费记录
+  target: 11_账单与工时/工时记录
+  rename_pattern: 工时记录
+  scenario: 通用
+- keywords:
+  - 差旅报销
+  - 费用报销
+  - 报销单
+  - 交通费
+  - 住宿费
+  - 出差费用
+  - reimbursement
+  - expense report
+  - 差旅费用
+  title_keywords:
+  - 差旅报销
+  - 费用报销
+  - 报销申请
+  target: 11_账单与工时/差旅费用
+  rename_pattern: 差旅费用
+  scenario: 通用
+- keywords:
+  - 案件策略
+  - 诉讼策略
+  - 仲裁策略
+  - 应诉策略
+  - strategy memo
+  - litigation strategy
+  - SWOT分析
+  - 策略备忘录
+  - 抗辩策略
+  title_keywords:
+  - 案件策略
+  - 诉讼策略
+  - 仲裁策略
+  - 策略分析
+  - 策略备忘录
+  target: 12_内部工作文件/案件策略
+  rename_pattern: 案件策略
+  scenario: 通用
+- keywords:
+  - 工作日志
+  - 工作记录
+  - 工作笔记
+  - 内部备忘
+  - internal memo
+  - internal note
+  - 研究笔记
+  - 问题清单
+  - 待办事项
+  - to-do list
+  - action items
+  title_keywords:
+  - 问题清单
+  - 材料收集清单
+  - 待办事项
+  - action items
+  target: 12_内部工作文件/工作日志
+  rename_pattern: 工作日志
+  scenario: 通用
+- keywords:
+  - 费用预算
+  - 诉讼费用预算
+  - 律师费预算
+  - 费用估算
+  - cost budget
+  - litigation budget
+  - 费用方案预测
+  title_keywords:
+  - 费用预算
+  - Cost Budget
+  - Litigation Budget
+  target: 12_内部工作文件/费用预算
+  rename_pattern: 费用预算
+  scenario: 通用
+- keywords:
+  - 公证书
+  - 认证书
+  - notarization
+  - apostille
+  - 海牙认证
+  - 公证证明
+  title_keywords:
+  - 公证书
+  - 认证书
+  target: 00_签约与委托/主体信息
+  rename_pattern: 公证文件
+  scenario: 通用
+- keywords:
+  - 证明书
+  - 证明函
+  - 在职证明
+  - 收入证明
+  - 资质证明
+  - 无犯罪记录证明
+  - certificate
+  - certification
+  - 公司证明
+  title_keywords:
+  - 证明书
+  - 证明函
+  - 在职证明
+  - 收入证明
+  - 资质证明
+  target: 00_签约与委托/主体信息
+  rename_pattern: 证明文件
+  scenario: 通用
+- keywords:
+  - 行政许可
+  - 许可证
+  - 批复
+  - 批准书
+  - 登记证
+  - 资质证书
+  - permit
+  - license
+  - approval
+  - 行政许可决定书
+  title_keywords:
+  - 许可证
+  - 批复
+  - 批准书
+  - 登记证
+  - 资质证书
+  - 行政许可决定书
+  target: 01_案件资料/客户提供材料/行政文件
+  rename_pattern: 行政文件
+  scenario: 通用
+- keywords:
+  - 可行性报告
+  - 调研报告
+  - 评估报告
+  - 审计报告
+  - 尽职调查报告
+  - feasibility report
+  - due diligence
+  - DD report
+  title_keywords:
+  - 可行性报告
+  - 调研报告
+  - 评估报告
+  - 审计报告
+  - 尽职调查报告
+  target: 02_法律研究/研究备忘录
+  rename_pattern: 调研报告
+  scenario: 通用
+fallback:
+  target: _待分类
+llm:
+  enabled: false
+  provider: none

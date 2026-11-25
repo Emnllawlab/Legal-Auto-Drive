@@ -189,6 +189,7 @@ class Registry:
         for ents in self.by_cat.values():
             for e in ents:
                 needles = set(e.raw)
+                needles.update(_norm(raw) for raw in e.raw)
                 # 公司额外用"词干"兜底：只剥尾部后缀、保留中间字，容忍 OCR 把
                 # 后缀读丢或被印章截断（"…工业企业管理（上海）有限公司"→"…工业企业管理"）
                 if e.category == "COMPANY":
@@ -202,7 +203,7 @@ class Registry:
                         out.append(Span(m.start(), m.end(), e.category, raw, "regex", 1.0))
         return out
 
-    def resolve(self, label, text) -> Entity:
+    def resolve(self, label, text, explicit_alias: bool = False) -> Entity:
         cat = canon(label)
         nt = _norm(text)
         bucket = self.by_cat.get(cat, [])
@@ -210,16 +211,16 @@ class Registry:
         for e in bucket:
             if nt in e.surfaces:
                 return e
-        # 2) 公司归并：核心名相互包含，或词干模糊同名（容忍 OCR 误差/截断）
+        # 2) 公司归并：只有明确标记为别名的命中才允许核心名归并。
+        # 模糊相似永远不自动合并：不同公司共用化名会改变法律事实，
+        # 应进入人工 link，而不是由相似度替用户作身份判断。
         if cat == "COMPANY":
             k = _co_key(text, self.lang)
-            stem = _co_stem(text)
             cands = []
-            for e in bucket:
-                if k and e.key and (k in e.key or e.key in k):
-                    cands.append(e)
-                elif self.lang in ("zh", "both") and _has_cjk(text) and _co_fuzzy_match(stem, _co_stem(e.canonical)):
-                    cands.append(e)
+            if explicit_alias:
+                for e in bucket:
+                    if k and e.key and (k in e.key or e.key in k):
+                        cands.append(e)
             if len(cands) == 1:
                 return self._absorb(cands[0], text)
             if len(cands) > 1:
@@ -272,17 +273,25 @@ def plan(text, spans, reg: Registry):
     """
     reps = []
     for s in sorted(spans, key=lambda x: x.start):
-        e = reg.resolve(s.label, s.text)
+        e = reg.resolve(s.label, s.text, explicit_alias=(s.source == "alias"))
         reps.append({"start": s.start, "end": s.end, "alias": e.alias,
-                     "original": s.text, "label": s.label})
+                     "original": s.text, "label": s.label,
+                     "fragments": s.fragments})
     return reps
 
 
 def pseudonymize(text, spans, reg: Registry):
     """纯文本脱敏：从右往左套用替换计划，偏移不失效。"""
     reps = plan(text, spans, reg)
-    for r in sorted(reps, key=lambda x: x["start"], reverse=True):
-        text = text[:r["start"]] + r["alias"] + text[r["end"]:]
+    operations = []
+    for r in reps:
+        fragments = r.get("fragments") or ((r["start"], r["end"]),)
+        # 连续实体正常替换；跨页/断行实体只在第一片段写入化名，
+        # 后续片段清空，避免同一实体在输出中重复出现多个化名。
+        for index, (start, end) in enumerate(fragments):
+            operations.append((start, end, r["alias"] if index == 0 else ""))
+    for start, end, replacement in sorted(operations, reverse=True):
+        text = text[:start] + replacement + text[end:]
     applied = [{"alias": r["alias"], "original": r["original"], "label": r["label"]}
                for r in reps]
     return text, applied
@@ -315,11 +324,16 @@ def render(text, spans, reg: Registry, mode: str = "alias"):
         return pseudonymize(text, spans, reg)
     reps, applied = [], []
     for s in spans:
-        rep = _mask_str(s.text, mode)
-        reps.append({"start": s.start, "end": s.end, "rep": rep})
-        applied.append({"alias": rep, "original": s.text, "label": s.label})
-    for r in sorted(reps, key=lambda x: x["start"], reverse=True):
-        text = text[:r["start"]] + r["rep"] + text[r["end"]:]
+        fragments = s.fragments or ((s.start, s.end),)
+        reps.append({"fragments": fragments, "rep": _mask_str(s.text, mode)})
+        applied.append({"alias": _mask_str(s.text, mode),
+                        "original": s.text, "label": s.label})
+    operations = []
+    for r in reps:
+        for start, end in r["fragments"]:
+            operations.append((start, end, _mask_str(text[start:end], mode)))
+    for start, end, replacement in sorted(operations, reverse=True):
+        text = text[:start] + replacement + text[end:]
     return text, applied
 
 
